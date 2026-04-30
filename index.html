@@ -229,18 +229,20 @@
     const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
 
     const STEP_LENGTH_METERS = 0.75;
-    const STEP_PEAK_THRESHOLD = 1.8;
-    const STEP_MIN_INTERVAL_MS = 300;
-    const STEP_MAX_INTERVAL_MS = 1400;
-    const WALKING_CONFIRM_STEPS = 4;
+    const STEP_PEAK_THRESHOLD = 1.25;
+    const STEP_MIN_INTERVAL_MS = 240;
+    const STEP_MAX_INTERVAL_MS = 1500;
+    const WALKING_CONFIRM_STEPS = 2;
     const GRAVITY_BASELINE = 9.81;
-    const INACTIVITY_RESET_MS = 1800;
+    const INACTIVITY_RESET_MS = 2000;
 
-    // Anti-hand-swing filter:
-    // Қолды сермегенде телефон көп бұрылады. Жүру кезінде қалтада/денеге жақын тұрса rotation аз болады.
-    const ROTATION_REJECT_THRESHOLD = 95;
-    const ROTATION_SOFT_REJECT_THRESHOLD = 65;
-    const MIN_ACTIVE_MOTION = 0.55;
+    // Anti-hand-swing filter v2:
+    // Бұрын rotation filter тым қатты болды, сондықтан real step-тер көп жоғалды.
+    // Енді rotation тек қозғалыс әлсіз болғанда ғана reject жасайды.
+    const ROTATION_REJECT_THRESHOLD = 160;
+    const ROTATION_SOFT_REJECT_THRESHOLD = 105;
+    const MIN_ACTIVE_MOTION = 0.35;
+    const STRONG_STEP_MOTION = 2.2;
 
     let steps = 0;
     let pendingSteps = 0;
@@ -365,18 +367,14 @@
 
         const average = recentIntervals.reduce((sum, value) => sum + value, 0) / recentIntervals.length;
         const maxDiff = Math.max(...recentIntervals.map(value => Math.abs(value - average)));
-        return maxDiff < 320;
+        return maxDiff < 520;
     }
 
     function acceptStep() {
         pendingSteps += 1;
 
         if (pendingSteps >= WALKING_CONFIRM_STEPS) {
-            if (steps === 0) {
-                steps = pendingSteps;
-            } else {
-                steps += 1;
-            }
+            steps += 1;
             updateUI();
         }
     }
@@ -417,8 +415,9 @@
             lastMotionTime = now;
         }
 
-        const looksLikeHandSwing = smoothRotation > ROTATION_REJECT_THRESHOLD ||
-            (smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.35);
+        const looksLikeHandSwing =
+            smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION ||
+            smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 0.95;
 
         if (looksLikeHandSwing) {
             rejectedHandSwings += 1;
@@ -437,7 +436,7 @@
         }
 
         const isPeak = magnitude > STEP_PEAK_THRESHOLD;
-        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.65;
+        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.82;
 
         if (isPeak) {
             wasAbovePeak = true;
