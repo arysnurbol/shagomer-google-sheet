@@ -215,6 +215,7 @@
         <button id="resetUserBtn" class="btn-secondary" type="button">Профильді өзгерту</button>
 
         <p class="small" id="sensorInfo">Сенсор: күтіп тұр</p>
+        <p class="small">Дәлірек санау үшін телефонды қалтаға немесе денеге жақын ұстаңыз. Қатты қол сермеу gyroscope filter арқылы reject болады.</p>
         <p class="small">iOS-та СТАРТ басқаннан кейін қозғалыс датчигіне рұқсат сұралады. Телефонда және HTTPS-та тестілеңіз.</p>
     </section>
 </main>
@@ -229,21 +230,29 @@
 
     const STEP_LENGTH_METERS = 0.75;
     const STEP_PEAK_THRESHOLD = 1.8;
-    const STEP_MIN_INTERVAL_MS = 250;
-    const STEP_MAX_INTERVAL_MS = 1600;
-    const WALKING_CONFIRM_STEPS = 2;
+    const STEP_MIN_INTERVAL_MS = 300;
+    const STEP_MAX_INTERVAL_MS = 1400;
+    const WALKING_CONFIRM_STEPS = 4;
     const GRAVITY_BASELINE = 9.81;
     const INACTIVITY_RESET_MS = 1800;
+
+    // Anti-hand-swing filter:
+    // Қолды сермегенде телефон көп бұрылады. Жүру кезінде қалтада/денеге жақын тұрса rotation аз болады.
+    const ROTATION_REJECT_THRESHOLD = 95;
+    const ROTATION_SOFT_REJECT_THRESHOLD = 65;
+    const MIN_ACTIVE_MOTION = 0.55;
 
     let steps = 0;
     let pendingSteps = 0;
     let isRunning = false;
     let lastStepTime = 0;
     let lastMagnitude = 0;
+    let lastRotationMagnitude = 0;
     let wasAbovePeak = false;
     let recentIntervals = [];
     let motionEventsCount = 0;
     let lastMotionTime = 0;
+    let rejectedHandSwings = 0;
 
     const registerForm = document.getElementById("registerForm");
     const tracker = document.getElementById("tracker");
@@ -324,10 +333,12 @@
         pendingSteps = 0;
         lastStepTime = 0;
         lastMagnitude = 0;
+        lastRotationMagnitude = 0;
         wasAbovePeak = false;
         recentIntervals = [];
         motionEventsCount = 0;
         lastMotionTime = 0;
+        rejectedHandSwings = 0;
         sensorInfo.textContent = "Сенсор: күтіп тұр";
     }
 
@@ -354,7 +365,7 @@
 
         const average = recentIntervals.reduce((sum, value) => sum + value, 0) / recentIntervals.length;
         const maxDiff = Math.max(...recentIntervals.map(value => Math.abs(value - average)));
-        return maxDiff < 450;
+        return maxDiff < 320;
     }
 
     function acceptStep() {
@@ -387,18 +398,42 @@
         const totalMagnitude = Math.sqrt(x * x + y * y + z * z);
         const movement = Math.abs(totalMagnitude - GRAVITY_BASELINE);
         const magnitude = lastMagnitude * 0.55 + movement * 0.45;
+
+        const rotation = event.rotationRate || { alpha: 0, beta: 0, gamma: 0 };
+        const rotationMagnitude = Math.sqrt(
+            Math.pow(rotation.alpha || 0, 2) +
+            Math.pow(rotation.beta || 0, 2) +
+            Math.pow(rotation.gamma || 0, 2)
+        );
+        const smoothRotation = lastRotationMagnitude * 0.65 + rotationMagnitude * 0.35;
+
         const now = Date.now();
 
         if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
             resetRhythmOnly();
         }
 
-        if (magnitude > 0.35) {
+        if (magnitude > MIN_ACTIVE_MOTION) {
             lastMotionTime = now;
         }
 
+        const looksLikeHandSwing = smoothRotation > ROTATION_REJECT_THRESHOLD ||
+            (smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.35);
+
+        if (looksLikeHandSwing) {
+            rejectedHandSwings += 1;
+            wasAbovePeak = false;
+            lastMagnitude = magnitude;
+            lastRotationMagnitude = smoothRotation;
+
+            if (motionEventsCount % 8 === 0) {
+                sensorInfo.textContent = `Қол қимылы reject: ${rejectedHandSwings} | rot: ${smoothRotation.toFixed(0)}`;
+            }
+            return;
+        }
+
         if (motionEventsCount % 8 === 0) {
-            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | events: ${motionEventsCount}`;
+            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | rot: ${smoothRotation.toFixed(0)} | events: ${motionEventsCount}`;
         }
 
         const isPeak = magnitude > STEP_PEAK_THRESHOLD;
@@ -424,6 +459,7 @@
         }
 
         lastMagnitude = magnitude;
+        lastRotationMagnitude = smoothRotation;
     }
 
     async function startTracking() {
