@@ -236,6 +236,7 @@
     const STEP_MAX_INTERVAL_MS = 1600;
     const WALKING_CONFIRM_STEPS = 2;
     const GRAVITY_BASELINE = 9.81;
+    const INACTIVITY_RESET_MS = 1800;
 
     let steps = 0;
     let pendingSteps = 0;
@@ -245,6 +246,7 @@
     let wasAbovePeak = false;
     let recentIntervals = [];
     let motionEventsCount = 0;
+    let lastMotionTime = 0;
 
     const registerForm = document.getElementById("registerForm");
     const tracker = document.getElementById("tracker");
@@ -290,6 +292,7 @@
         wasAbovePeak = false;
         recentIntervals = [];
         motionEventsCount = 0;
+        lastMotionTime = 0;
         sensorInfo.textContent = "Сенсор: күтіп тұр";
     }
 
@@ -318,7 +321,7 @@
     function acceptStep() {
         pendingSteps += 1;
 
-        // Алғашқы 2-3 импульсті бірден көрсетпейміз.
+        // Алғашқы 1-2 импульсті бірден көрсетпейміз.
         // Бұл бір орында қол сермеуден болатын жалған қадамдарды азайтады.
         if (pendingSteps >= WALKING_CONFIRM_STEPS) {
             if (steps === 0) {
@@ -330,42 +333,11 @@
         }
     }
 
-    function showTracker() {
-        registerForm.classList.add("hidden");
-        tracker.classList.remove("hidden");
-        setStatus("Дайын");
-        updateUI();
-    }
-
-    function showRegister(user = null) {
-        registerForm.classList.remove("hidden");
-        tracker.classList.add("hidden");
-
-        if (user) {
-            registerForm.fullName.value = user.fullName || "";
-            registerForm.year.value = user.year || "";
-            registerForm.city.value = user.city || "";
-            registerForm.phone.value = user.phone || "";
-        }
-    }
-
-    async function requestMotionPermission() {
-        if (typeof DeviceMotionEvent === "undefined") {
-            setStatus("Бұл браузер қозғалыс датчигін қолдамайды", "error");
-            return false;
-        }
-
-        if (typeof DeviceMotionEvent.requestPermission === "function") {
-            try {
-                const result = await DeviceMotionEvent.requestPermission();
-                return result === "granted";
-            } catch (error) {
-                console.error(error);
-                return false;
-            }
-        }
-
-        return true;
+    function resetRhythmOnly() {
+        pendingSteps = 0;
+        lastStepTime = 0;
+        wasAbovePeak = false;
+        recentIntervals = [];
     }
 
     function handleMotion(event) {
@@ -394,6 +366,16 @@
         const magnitude = lastMagnitude * 0.55 + movement * 0.45;
         const now = Date.now();
 
+        // Егер адам тоқтап қалса, rhythm state-ті тазалаймыз.
+        // Әйтпесе қайта жүрген кезде ескі interval filter жаңа қадамдарды reject қылып тастайды.
+        if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
+            resetRhythmOnly();
+        }
+
+        if (magnitude > 0.35) {
+            lastMotionTime = now;
+        }
+
         if (motionEventsCount % 8 === 0) {
             sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | events: ${motionEventsCount}`;
         }
@@ -412,8 +394,11 @@
                 acceptStep();
                 lastStepTime = now;
             } else {
-                pendingSteps = 0;
-                recentIntervals = [];
+                // Бір рет rhythm бұзылса, бүкіл tracker-ді өлтірмейміз.
+                // Тек ағымдағы rhythm-ді жаңадан бастаймыз.
+                resetRhythmOnly();
+                lastStepTime = now;
+                pendingSteps = 1;
             }
 
             wasAbovePeak = false;
