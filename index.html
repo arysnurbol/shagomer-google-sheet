@@ -214,6 +214,7 @@
         <button id="resetBtn" class="btn-secondary" type="button">Қайта бастау</button>
         <button id="resetUserBtn" class="btn-secondary" type="button">Профильді өзгерту</button>
 
+        <p class="small" id="sensorInfo">Сенсор: күтіп тұр</p>
         <p class="small">iOS-та СТАРТ басқаннан кейін қозғалыс датчигіне рұқсат сұралады. Телефонда және HTTPS-та тестілеңіз.</p>
     </section>
 </main>
@@ -230,10 +231,11 @@
 
     // Бұрынғы қарапайым threshold қолды сермегенде де санап кететін.
     // Қазір алгоритм қадамға ұқсас тұрақты ритмді ғана қабылдайды.
-    const STEP_PEAK_THRESHOLD = 1.15;
-    const STEP_MIN_INTERVAL_MS = 330;
-    const STEP_MAX_INTERVAL_MS = 1200;
-    const WALKING_CONFIRM_STEPS = 3;
+    const STEP_PEAK_THRESHOLD = 1.8;
+    const STEP_MIN_INTERVAL_MS = 250;
+    const STEP_MAX_INTERVAL_MS = 1600;
+    const WALKING_CONFIRM_STEPS = 2;
+    const GRAVITY_BASELINE = 9.81;
 
     let steps = 0;
     let pendingSteps = 0;
@@ -242,6 +244,7 @@
     let lastMagnitude = 0;
     let wasAbovePeak = false;
     let recentIntervals = [];
+    let motionEventsCount = 0;
 
     const registerForm = document.getElementById("registerForm");
     const tracker = document.getElementById("tracker");
@@ -252,6 +255,7 @@
     const stopBtn = document.getElementById("stopBtn");
     const resetBtn = document.getElementById("resetBtn");
     const resetUserBtn = document.getElementById("resetUserBtn");
+    const sensorInfo = document.getElementById("sensorInfo");
 
     function getUser() {
         try {
@@ -285,6 +289,8 @@
         lastMagnitude = 0;
         wasAbovePeak = false;
         recentIntervals = [];
+        motionEventsCount = 0;
+        sensorInfo.textContent = "Сенсор: күтіп тұр";
     }
 
     function isWalkingRhythm(interval) {
@@ -306,7 +312,7 @@
 
         // Қолды кездейсоқ сермеу көбіне тұрақсыз болады.
         // Адам жүргенде интервалдар бір-біріне жақындау келеді.
-        return maxDiff < 280;
+        return maxDiff < 450;
     }
 
     function acceptStep() {
@@ -365,31 +371,44 @@
     function handleMotion(event) {
         if (!isRunning) return;
 
-        // acceleration — гравитациясыз үдеу. Қолдаса, соны қолданамыз.
-        // Қолдамаса, accelerationIncludingGravity-ға fallback жасаймыз.
-        const acc = event.acceleration || event.accelerationIncludingGravity;
-        if (!acc) return;
+        motionEventsCount += 1;
+
+        // Көп телефонда event.acceleration null болуы мүмкін.
+        // Сондықтан accelerationIncludingGravity негізгі fallback ретінде қолданылады.
+        const acc = event.accelerationIncludingGravity || event.acceleration;
+        if (!acc) {
+            sensorInfo.textContent = "Сенсор: мәлімет келмей тұр";
+            return;
+        }
 
         const x = acc.x || 0;
         const y = acc.y || 0;
         const z = acc.z || 0;
-        const rawMagnitude = Math.sqrt(x * x + y * y + z * z);
+        const totalMagnitude = Math.sqrt(x * x + y * y + z * z);
 
-        // Low-pass smoothing: датчик шуын азайтады.
-        const magnitude = lastMagnitude * 0.75 + rawMagnitude * 0.25;
+        // Гравитацияны жуықтап алып тастаймыз.
+        // Телефон қолға/қалтаға әртүрлі бұрылғанда да сигнал көрінуі үшін absolute value қолданамыз.
+        const movement = Math.abs(totalMagnitude - GRAVITY_BASELINE);
+
+        // Smoothing: тым қатты емес, реакция сақталсын.
+        const magnitude = lastMagnitude * 0.55 + movement * 0.45;
         const now = Date.now();
 
+        if (motionEventsCount % 8 === 0) {
+            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | events: ${motionEventsCount}`;
+        }
+
         const isPeak = magnitude > STEP_PEAK_THRESHOLD;
-        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.72;
+        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.65;
 
         if (isPeak) {
             wasAbovePeak = true;
         }
 
         if (hasFallen) {
-            const interval = lastStepTime ? now - lastStepTime : 0;
+            const interval = lastStepTime ? now - lastStepTime : 600;
 
-            if (!lastStepTime || isWalkingRhythm(interval)) {
+            if (isWalkingRhythm(interval)) {
                 acceptStep();
                 lastStepTime = now;
             } else {
