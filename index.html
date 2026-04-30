@@ -228,9 +228,6 @@
     const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
 
     const STEP_LENGTH_METERS = 0.75;
-
-    // Бұрынғы қарапайым threshold қолды сермегенде де санап кететін.
-    // Қазір алгоритм қадамға ұқсас тұрақты ритмді ғана қабылдайды.
     const STEP_PEAK_THRESHOLD = 1.8;
     const STEP_MIN_INTERVAL_MS = 250;
     const STEP_MAX_INTERVAL_MS = 1600;
@@ -285,6 +282,44 @@
         metersValue.textContent = String(getMeters());
     }
 
+    function showTracker() {
+        registerForm.classList.add("hidden");
+        tracker.classList.remove("hidden");
+        setStatus("Дайын");
+        updateUI();
+    }
+
+    function showRegister(user = null) {
+        registerForm.classList.remove("hidden");
+        tracker.classList.add("hidden");
+
+        if (user) {
+            registerForm.fullName.value = user.fullName || "";
+            registerForm.year.value = user.year || "";
+            registerForm.city.value = user.city || "";
+            registerForm.phone.value = user.phone || "";
+        }
+    }
+
+    async function requestMotionPermission() {
+        if (typeof DeviceMotionEvent === "undefined") {
+            setStatus("Бұл браузер қозғалыс датчигін қолдамайды", "error");
+            return false;
+        }
+
+        if (typeof DeviceMotionEvent.requestPermission === "function") {
+            try {
+                const result = await DeviceMotionEvent.requestPermission();
+                return result === "granted";
+            } catch (error) {
+                console.error(error);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     function resetStepAlgorithm() {
         pendingSteps = 0;
         lastStepTime = 0;
@@ -294,6 +329,13 @@
         motionEventsCount = 0;
         lastMotionTime = 0;
         sensorInfo.textContent = "Сенсор: күтіп тұр";
+    }
+
+    function resetRhythmOnly() {
+        pendingSteps = 0;
+        lastStepTime = 0;
+        wasAbovePeak = false;
+        recentIntervals = [];
     }
 
     function isWalkingRhythm(interval) {
@@ -312,17 +354,12 @@
 
         const average = recentIntervals.reduce((sum, value) => sum + value, 0) / recentIntervals.length;
         const maxDiff = Math.max(...recentIntervals.map(value => Math.abs(value - average)));
-
-        // Қолды кездейсоқ сермеу көбіне тұрақсыз болады.
-        // Адам жүргенде интервалдар бір-біріне жақындау келеді.
         return maxDiff < 450;
     }
 
     function acceptStep() {
         pendingSteps += 1;
 
-        // Алғашқы 1-2 импульсті бірден көрсетпейміз.
-        // Бұл бір орында қол сермеуден болатын жалған қадамдарды азайтады.
         if (pendingSteps >= WALKING_CONFIRM_STEPS) {
             if (steps === 0) {
                 steps = pendingSteps;
@@ -333,20 +370,11 @@
         }
     }
 
-    function resetRhythmOnly() {
-        pendingSteps = 0;
-        lastStepTime = 0;
-        wasAbovePeak = false;
-        recentIntervals = [];
-    }
-
     function handleMotion(event) {
         if (!isRunning) return;
 
         motionEventsCount += 1;
 
-        // Көп телефонда event.acceleration null болуы мүмкін.
-        // Сондықтан accelerationIncludingGravity негізгі fallback ретінде қолданылады.
         const acc = event.accelerationIncludingGravity || event.acceleration;
         if (!acc) {
             sensorInfo.textContent = "Сенсор: мәлімет келмей тұр";
@@ -357,17 +385,10 @@
         const y = acc.y || 0;
         const z = acc.z || 0;
         const totalMagnitude = Math.sqrt(x * x + y * y + z * z);
-
-        // Гравитацияны жуықтап алып тастаймыз.
-        // Телефон қолға/қалтаға әртүрлі бұрылғанда да сигнал көрінуі үшін absolute value қолданамыз.
         const movement = Math.abs(totalMagnitude - GRAVITY_BASELINE);
-
-        // Smoothing: тым қатты емес, реакция сақталсын.
         const magnitude = lastMagnitude * 0.55 + movement * 0.45;
         const now = Date.now();
 
-        // Егер адам тоқтап қалса, rhythm state-ті тазалаймыз.
-        // Әйтпесе қайта жүрген кезде ескі interval filter жаңа қадамдарды reject қылып тастайды.
         if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
             resetRhythmOnly();
         }
@@ -394,8 +415,6 @@
                 acceptStep();
                 lastStepTime = now;
             } else {
-                // Бір рет rhythm бұзылса, бүкіл tracker-ді өлтірмейміз.
-                // Тек ағымдағы rhythm-ді жаңадан бастаймыз.
                 resetRhythmOnly();
                 lastStepTime = now;
                 pendingSteps = 1;
@@ -417,7 +436,6 @@
 
         isRunning = true;
         resetStepAlgorithm();
-
         window.addEventListener("devicemotion", handleMotion);
 
         startBtn.disabled = true;
@@ -435,9 +453,15 @@
         stopBtn.disabled = true;
         setStatus("Тоқтады");
 
-        // Google Sheets келесі этапта қосылады.
-        // Қазір функция дайын, бірақ GOOGLE_SHEETS_ENABLED = false болғандықтан жібермейді.
         sendToGoogleSheetsIfEnabled();
+    }
+
+    function resetCounter() {
+        stopTracking();
+        steps = 0;
+        resetStepAlgorithm();
+        updateUI();
+        setStatus("Қайта бастауға дайын");
     }
 
     function buildResultPayload() {
@@ -473,14 +497,6 @@
         } catch (error) {
             console.warn("Google Sheets жіберу қатесі:", error);
         }
-    }
-
-    function resetCounter() {
-        stopTracking();
-        steps = 0;
-        resetStepAlgorithm();
-        updateUI();
-        setStatus("Қайта бастауға дайын");
     }
 
     registerForm.addEventListener("submit", (event) => {
