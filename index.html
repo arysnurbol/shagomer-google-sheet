@@ -221,13 +221,27 @@
 <script>
     const STORAGE_KEY_USER = "shagomer_user";
 
+    // Google Sheets келесі этапта қосылады.
+    // Қазір false тұр, сондықтан ешқайда жібермейді.
+    const GOOGLE_SHEETS_ENABLED = false;
+    const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+
     const STEP_LENGTH_METERS = 0.75;
-    const STEP_THRESHOLD = 12;
-    const STEP_DELAY_MS = 320;
+
+    // Бұрынғы қарапайым threshold қолды сермегенде де санап кететін.
+    // Қазір алгоритм қадамға ұқсас тұрақты ритмді ғана қабылдайды.
+    const STEP_PEAK_THRESHOLD = 1.15;
+    const STEP_MIN_INTERVAL_MS = 330;
+    const STEP_MAX_INTERVAL_MS = 1200;
+    const WALKING_CONFIRM_STEPS = 3;
 
     let steps = 0;
+    let pendingSteps = 0;
     let isRunning = false;
     let lastStepTime = 0;
+    let lastMagnitude = 0;
+    let wasAbovePeak = false;
+    let recentIntervals = [];
 
     const registerForm = document.getElementById("registerForm");
     const tracker = document.getElementById("tracker");
@@ -263,6 +277,51 @@
     function updateUI() {
         stepsValue.textContent = String(steps);
         metersValue.textContent = String(getMeters());
+    }
+
+    function resetStepAlgorithm() {
+        pendingSteps = 0;
+        lastStepTime = 0;
+        lastMagnitude = 0;
+        wasAbovePeak = false;
+        recentIntervals = [];
+    }
+
+    function isWalkingRhythm(interval) {
+        if (interval < STEP_MIN_INTERVAL_MS || interval > STEP_MAX_INTERVAL_MS) {
+            return false;
+        }
+
+        recentIntervals.push(interval);
+        if (recentIntervals.length > 4) {
+            recentIntervals.shift();
+        }
+
+        if (recentIntervals.length < 2) {
+            return true;
+        }
+
+        const average = recentIntervals.reduce((sum, value) => sum + value, 0) / recentIntervals.length;
+        const maxDiff = Math.max(...recentIntervals.map(value => Math.abs(value - average)));
+
+        // Қолды кездейсоқ сермеу көбіне тұрақсыз болады.
+        // Адам жүргенде интервалдар бір-біріне жақындау келеді.
+        return maxDiff < 280;
+    }
+
+    function acceptStep() {
+        pendingSteps += 1;
+
+        // Алғашқы 2-3 импульсті бірден көрсетпейміз.
+        // Бұл бір орында қол сермеуден болатын жалған қадамдарды азайтады.
+        if (pendingSteps >= WALKING_CONFIRM_STEPS) {
+            if (steps === 0) {
+                steps = pendingSteps;
+            } else {
+                steps += 1;
+            }
+            updateUI();
+        }
     }
 
     function showTracker() {
@@ -306,21 +365,42 @@
     function handleMotion(event) {
         if (!isRunning) return;
 
-        const acc = event.accelerationIncludingGravity;
+        // acceleration — гравитациясыз үдеу. Қолдаса, соны қолданамыз.
+        // Қолдамаса, accelerationIncludingGravity-ға fallback жасаймыз.
+        const acc = event.acceleration || event.accelerationIncludingGravity;
         if (!acc) return;
 
         const x = acc.x || 0;
         const y = acc.y || 0;
         const z = acc.z || 0;
+        const rawMagnitude = Math.sqrt(x * x + y * y + z * z);
 
-        const magnitude = Math.sqrt(x * x + y * y + z * z);
+        // Low-pass smoothing: датчик шуын азайтады.
+        const magnitude = lastMagnitude * 0.75 + rawMagnitude * 0.25;
         const now = Date.now();
 
-        if (magnitude > STEP_THRESHOLD && now - lastStepTime > STEP_DELAY_MS) {
-            steps += 1;
-            lastStepTime = now;
-            updateUI();
+        const isPeak = magnitude > STEP_PEAK_THRESHOLD;
+        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.72;
+
+        if (isPeak) {
+            wasAbovePeak = true;
         }
+
+        if (hasFallen) {
+            const interval = lastStepTime ? now - lastStepTime : 0;
+
+            if (!lastStepTime || isWalkingRhythm(interval)) {
+                acceptStep();
+                lastStepTime = now;
+            } else {
+                pendingSteps = 0;
+                recentIntervals = [];
+            }
+
+            wasAbovePeak = false;
+        }
+
+        lastMagnitude = magnitude;
     }
 
     async function startTracking() {
@@ -332,7 +412,7 @@
         }
 
         isRunning = true;
-        lastStepTime = 0;
+        resetStepAlgorithm();
 
         window.addEventListener("devicemotion", handleMotion);
 
@@ -350,12 +430,51 @@
         startBtn.disabled = false;
         stopBtn.disabled = true;
         setStatus("Тоқтады");
+
+        // Google Sheets келесі этапта қосылады.
+        // Қазір функция дайын, бірақ GOOGLE_SHEETS_ENABLED = false болғандықтан жібермейді.
+        sendToGoogleSheetsIfEnabled();
+    }
+
+    function buildResultPayload() {
+        return {
+            createdAt: new Date().toISOString(),
+            user: getUser(),
+            steps,
+            meters: getMeters(),
+            source: "browser-devicemotion-mvp",
+            userAgent: navigator.userAgent
+        };
+    }
+
+    async function sendToGoogleSheetsIfEnabled() {
+        if (!GOOGLE_SHEETS_ENABLED) return;
+
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) {
+            console.warn("Google Script URL қойылмаған");
+            return;
+        }
+
+        const payload = buildResultPayload();
+
+        try {
+            await fetch(GOOGLE_SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+        } catch (error) {
+            console.warn("Google Sheets жіберу қатесі:", error);
+        }
     }
 
     function resetCounter() {
         stopTracking();
         steps = 0;
-        lastStepTime = 0;
+        resetStepAlgorithm();
         updateUI();
         setStatus("Қайта бастауға дайын");
     }
@@ -370,9 +489,6 @@
             phone: registerForm.phone.value.trim(),
             savedAt: new Date().toISOString()
         };
-
-
-
 
         saveUser(user);
         showTracker();
