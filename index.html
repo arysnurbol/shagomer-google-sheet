@@ -255,7 +255,6 @@
     let motionEventsCount = 0;
     let lastMotionTime = 0;
     let rejectedHandSwings = 0;
-    isWalkingConfirmed = false;
     let isWalkingConfirmed = false;
 
     const registerForm = document.getElementById("registerForm");
@@ -343,6 +342,7 @@
         motionEventsCount = 0;
         lastMotionTime = 0;
         rejectedHandSwings = 0;
+        isWalkingConfirmed = false;
         sensorInfo.textContent = "Сенсор: күтіп тұр";
     }
 
