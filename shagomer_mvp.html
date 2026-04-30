@@ -1,238 +1,225 @@
 <!doctype html>
 <html lang="kk">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ШАГОМЕР MVP</title>
-  <style>
-    :root {
-      --bg: #f6f7fb;
-      --card: #ffffff;
-      --text: #121826;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --primary: #111827;
-      --success: #15803d;
-      --danger: #b91c1c;
-      --warning: #b45309;
-    }
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ШАГОМЕР MVP</title>
+    <style>
+        :root {
+            --bg: #f6f7fb;
+            --card: #ffffff;
+            --text: #121826;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --primary: #111827;
+            --success: #15803d;
+            --danger: #b91c1c;
+            --warning: #b45309;
+        }
 
-    * { box-sizing: border-box; }
+        * { box-sizing: border-box; }
 
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
 
-    .app {
-      width: 100%;
-      max-width: 460px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 22px;
-      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
-    }
+        .app {
+            width: 100%;
+            max-width: 460px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 22px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
 
-    h1 {
-      margin: 0 0 6px;
-      font-size: 30px;
-      letter-spacing: 0.04em;
-      text-align: center;
-    }
+        h1 {
+            margin: 0 0 6px;
+            font-size: 30px;
+            letter-spacing: 0.04em;
+            text-align: center;
+        }
 
-    .subtitle {
-      margin: 0 0 20px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 14px;
-    }
+        .subtitle {
+            margin: 0 0 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
 
-    .section {
-      border-top: 1px solid var(--border);
-      padding-top: 18px;
-      margin-top: 18px;
-    }
+        .section {
+            border-top: 1px solid var(--border);
+            padding-top: 18px;
+            margin-top: 18px;
+        }
 
-    label {
-      display: block;
-      margin: 12px 0 6px;
-      font-size: 14px;
-      color: var(--muted);
-    }
+        label {
+            display: block;
+            margin: 12px 0 6px;
+            font-size: 14px;
+            color: var(--muted);
+        }
 
-    input {
-      width: 100%;
-      padding: 13px 14px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      font-size: 16px;
-      outline: none;
-    }
+        input {
+            width: 100%;
+            padding: 13px 14px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            font-size: 16px;
+            outline: none;
+        }
 
-    input:focus { border-color: var(--primary); }
+        input:focus { border-color: var(--primary); }
 
-    button {
-      width: 100%;
-      border: 0;
-      border-radius: 16px;
-      padding: 14px 16px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: 12px;
-    }
+        button {
+            width: 100%;
+            border: 0;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 12px;
+        }
 
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
 
-    .btn-success {
-      background: var(--success);
-      color: white;
-    }
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
 
-    .btn-danger {
-      background: var(--danger);
-      color: white;
-    }
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
 
-    .btn-secondary {
-      background: #eef2ff;
-      color: #1f2937;
-    }
+        .btn-secondary {
+            background: #eef2ff;
+            color: #1f2937;
+        }
 
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
 
-    .stats {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-top: 16px;
-    }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
 
-    .stat {
-      background: #f9fafb;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 16px;
-      text-align: center;
-    }
+        .stat {
+            background: #f9fafb;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            text-align: center;
+        }
 
-    .stat strong {
-      display: block;
-      font-size: 30px;
-      line-height: 1.1;
-    }
+        .stat strong {
+            display: block;
+            font-size: 34px;
+            line-height: 1.1;
+        }
 
-    .stat span {
-      display: block;
-      margin-top: 6px;
-      color: var(--muted);
-      font-size: 13px;
-    }
+        .stat span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 13px;
+        }
 
-    .status {
-      margin-top: 14px;
-      padding: 12px;
-      border-radius: 14px;
-      font-size: 14px;
-      background: #f3f4f6;
-      color: var(--muted);
-      text-align: center;
-    }
+        .status {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 14px;
+            font-size: 14px;
+            background: #f3f4f6;
+            color: var(--muted);
+            text-align: center;
+        }
 
-    .status.running {
-      background: #dcfce7;
-      color: var(--success);
-    }
+        .status.running {
+            background: #dcfce7;
+            color: var(--success);
+        }
 
-    .status.offline {
-      background: #fef3c7;
-      color: var(--warning);
-    }
+        .status.error {
+            background: #fee2e2;
+            color: var(--danger);
+        }
 
-    .status.error {
-      background: #fee2e2;
-      color: var(--danger);
-    }
+        .hidden { display: none; }
 
-    .hidden { display: none; }
-
-    .small {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
-      text-align: center;
-      margin-top: 14px;
-    }
-  </style>
+        .small {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+            text-align: center;
+            margin-top: 14px;
+        }
+    </style>
 </head>
 <body>
-  <main class="app">
+<main class="app">
     <h1>ШАГОМЕР</h1>
     <p class="subtitle">MVP: браузердегі қадам санағыш</p>
 
     <form id="registerForm">
-      <label for="fullName">ФИО</label>
-      <input id="fullName" name="fullName" required autocomplete="name" placeholder="Аты-жөніңіз" />
+        <label for="fullName">ФИО</label>
+        <input id="fullName" name="fullName" required autocomplete="name" placeholder="Аты-жөніңіз" />
 
-      <label for="year">Жыл / туған жыл</label>
-      <input id="year" name="year" required inputmode="numeric" placeholder="Мысалы: 2001" />
+        <label for="year">Жыл / туған жыл</label>
+        <input id="year" name="year" required inputmode="numeric" placeholder="Мысалы: 2001" />
 
-      <label for="city">Қала</label>
-      <input id="city" name="city" required placeholder="Мысалы: Алматы" />
+        <label for="city">Қала</label>
+        <input id="city" name="city" required placeholder="Мысалы: Алматы" />
 
-      <label for="phone">Телефон</label>
-      <input id="phone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7..." />
+        <label for="phone">Телефон</label>
+        <input id="phone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7..." />
 
-      <button class="btn-primary" type="submit">Сақтау</button>
+        <button class="btn-primary" type="submit">Сақтау</button>
     </form>
 
     <section id="tracker" class="section hidden">
-      <div class="status" id="statusBox">Дайын</div>
+        <div class="status" id="statusBox">Дайын</div>
 
-      <div class="stats">
-        <div class="stat">
-          <strong id="stepsValue">0</strong>
-          <span>қадам</span>
+        <div class="stats">
+            <div class="stat">
+                <strong id="stepsValue">0</strong>
+                <span>қадам</span>
+            </div>
+            <div class="stat">
+                <strong id="metersValue">0</strong>
+                <span>метр</span>
+            </div>
         </div>
-        <div class="stat">
-          <strong id="metersValue">0</strong>
-          <span>метр</span>
-        </div>
-      </div>
 
-      <button id="startBtn" class="btn-success" type="button">СТАРТ</button>
-      <button id="stopBtn" class="btn-danger" type="button" disabled>СТОП</button>
-      <button id="sendBtn" class="btn-secondary" type="button">Нәтижені жіберу</button>
-      <button id="resetUserBtn" class="btn-secondary" type="button">Профильді өзгерту</button>
+        <button id="startBtn" class="btn-success" type="button">СТАРТ</button>
+        <button id="stopBtn" class="btn-danger" type="button" disabled>СТОП</button>
+        <button id="resetBtn" class="btn-secondary" type="button">Қайта бастау</button>
+        <button id="resetUserBtn" class="btn-secondary" type="button">Профильді өзгерту</button>
 
-      <p class="small" id="queueInfo">Жіберілмеген нәтиже: 0</p>
-      <p class="small">iOS-та СТАРТ басқаннан кейін қозғалыс датчигіне рұқсат сұралады. HTTPS-та іске қосыңыз.</p>
+        <p class="small">iOS-та СТАРТ басқаннан кейін қозғалыс датчигіне рұқсат сұралады. Телефонда және HTTPS-та тестілеңіз.</p>
     </section>
-  </main>
+</main>
 
-  <script>
-    // 1) Google Apps Script Web App URL осында қойылады.
-    // MVP үшін ең жеңіл жол: Google Apps Script doPost(e) арқылы Sheet-ке append жасау.
-    const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
-
-    const STORAGE_KEYS = {
-      user: "shagomer_user",
-      queue: "shagomer_queue"
-    };
+<script>
+    const STORAGE_KEY_USER = "shagomer_user";
 
     const STEP_LENGTH_METERS = 0.75;
     const STEP_THRESHOLD = 12;
@@ -241,7 +228,6 @@
     let steps = 0;
     let isRunning = false;
     let lastStepTime = 0;
-    let startedAt = null;
 
     const registerForm = document.getElementById("registerForm");
     const tracker = document.getElementById("tracker");
@@ -250,253 +236,156 @@
     const metersValue = document.getElementById("metersValue");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
-    const sendBtn = document.getElementById("sendBtn");
+    const resetBtn = document.getElementById("resetBtn");
     const resetUserBtn = document.getElementById("resetUserBtn");
-    const queueInfo = document.getElementById("queueInfo");
 
     function getUser() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEYS.user));
-      } catch {
-        return null;
-      }
+        try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY_USER));
+        } catch {
+            return null;
+        }
     }
 
     function saveUser(user) {
-      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
-    }
-
-    function getQueue() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEYS.queue) || "[]");
-      } catch {
-        return [];
-      }
-    }
-
-    function setQueue(queue) {
-      localStorage.setItem(STORAGE_KEYS.queue, JSON.stringify(queue));
-      updateQueueInfo();
-    }
-
-    function updateQueueInfo() {
-      queueInfo.textContent = `Жіберілмеген нәтиже: ${getQueue().length}`;
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
     }
 
     function setStatus(message, type = "") {
-      statusBox.className = `status ${type}`.trim();
-      statusBox.textContent = message;
+        statusBox.className = `status ${type}`.trim();
+        statusBox.textContent = message;
     }
 
     function getMeters() {
-      return Math.round(steps * STEP_LENGTH_METERS);
+        return Math.round(steps * STEP_LENGTH_METERS);
     }
 
     function updateUI() {
-      stepsValue.textContent = String(steps);
-      metersValue.textContent = String(getMeters());
-      updateQueueInfo();
+        stepsValue.textContent = String(steps);
+        metersValue.textContent = String(getMeters());
     }
 
     function showTracker() {
-      registerForm.classList.add("hidden");
-      tracker.classList.remove("hidden");
-      updateUI();
-      setStatus(navigator.onLine ? "Дайын" : "Офлайн режим", navigator.onLine ? "" : "offline");
+        registerForm.classList.add("hidden");
+        tracker.classList.remove("hidden");
+        setStatus("Дайын");
+        updateUI();
     }
 
     function showRegister(user = null) {
-      registerForm.classList.remove("hidden");
-      tracker.classList.add("hidden");
+        registerForm.classList.remove("hidden");
+        tracker.classList.add("hidden");
 
-      if (user) {
-        registerForm.fullName.value = user.fullName || "";
-        registerForm.year.value = user.year || "";
-        registerForm.city.value = user.city || "";
-        registerForm.phone.value = user.phone || "";
-      }
+        if (user) {
+            registerForm.fullName.value = user.fullName || "";
+            registerForm.year.value = user.year || "";
+            registerForm.city.value = user.city || "";
+            registerForm.phone.value = user.phone || "";
+        }
     }
 
     async function requestMotionPermission() {
-      if (typeof DeviceMotionEvent === "undefined") {
-        setStatus("Бұл браузер DeviceMotionEvent қолдамайды", "error");
-        return false;
-      }
-
-      if (typeof DeviceMotionEvent.requestPermission === "function") {
-        try {
-          const result = await DeviceMotionEvent.requestPermission();
-          return result === "granted";
-        } catch (error) {
-          console.error(error);
-          return false;
+        if (typeof DeviceMotionEvent === "undefined") {
+            setStatus("Бұл браузер қозғалыс датчигін қолдамайды", "error");
+            return false;
         }
-      }
 
-      return true;
+        if (typeof DeviceMotionEvent.requestPermission === "function") {
+            try {
+                const result = await DeviceMotionEvent.requestPermission();
+                return result === "granted";
+            } catch (error) {
+                console.error(error);
+                return false;
+            }
+        }
+
+        return true;
     }
 
     function handleMotion(event) {
-      if (!isRunning) return;
+        if (!isRunning) return;
 
-      const acc = event.accelerationIncludingGravity;
-      if (!acc) return;
+        const acc = event.accelerationIncludingGravity;
+        if (!acc) return;
 
-      const x = acc.x || 0;
-      const y = acc.y || 0;
-      const z = acc.z || 0;
-      const magnitude = Math.sqrt(x * x + y * y + z * z);
-      const now = Date.now();
+        const x = acc.x || 0;
+        const y = acc.y || 0;
+        const z = acc.z || 0;
 
-      if (magnitude > STEP_THRESHOLD && now - lastStepTime > STEP_DELAY_MS) {
-        steps += 1;
-        lastStepTime = now;
-        updateUI();
-      }
+        const magnitude = Math.sqrt(x * x + y * y + z * z);
+        const now = Date.now();
+
+        if (magnitude > STEP_THRESHOLD && now - lastStepTime > STEP_DELAY_MS) {
+            steps += 1;
+            lastStepTime = now;
+            updateUI();
+        }
     }
 
     async function startTracking() {
-      const allowed = await requestMotionPermission();
-      if (!allowed) {
-        setStatus("Датчикке рұқсат берілмеді", "error");
-        return;
-      }
+        const allowed = await requestMotionPermission();
 
-      steps = 0;
-      startedAt = new Date().toISOString();
-      lastStepTime = 0;
-      isRunning = true;
+        if (!allowed) {
+            setStatus("Датчикке рұқсат берілмеді", "error");
+            return;
+        }
 
-      window.addEventListener("devicemotion", handleMotion);
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      setStatus("Жүріп жатыр", "running");
-      updateUI();
+        isRunning = true;
+        lastStepTime = 0;
+
+        window.addEventListener("devicemotion", handleMotion);
+
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus("Жүріп жатыр", "running");
     }
 
     function stopTracking() {
-      if (!isRunning) return;
+        if (!isRunning) return;
 
-      isRunning = false;
-      window.removeEventListener("devicemotion", handleMotion);
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      setStatus("Тоқтады. Нәтиже сақталды.");
+        isRunning = false;
+        window.removeEventListener("devicemotion", handleMotion);
 
-      const result = buildResultPayload();
-      saveToQueue(result);
-      syncQueue();
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        setStatus("Тоқтады");
     }
 
-    function buildResultPayload() {
-      const user = getUser();
-      return {
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        createdAt: new Date().toISOString(),
-        startedAt,
-        finishedAt: new Date().toISOString(),
-        user,
-        steps,
-        meters: getMeters(),
-        userAgent: navigator.userAgent
-      };
-    }
-
-    function saveToQueue(result) {
-      const queue = getQueue();
-      queue.push(result);
-      setQueue(queue);
-    }
-
-    async function sendResult(result) {
-      if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) {
-        throw new Error("GOOGLE_SCRIPT_URL қойылмаған");
-      }
-
-      const response = await fetch(GOOGLE_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(result)
-      });
-
-      // no-cors режимінде response оқылмайды, сондықтан fetch error болмаса сәтті деп қабылдаймыз.
-      return response;
-    }
-
-    async function syncQueue() {
-      if (!navigator.onLine) {
-        setStatus("Офлайн. Нәтиже кейін жіберіледі.", "offline");
-        return;
-      }
-
-      const queue = getQueue();
-      if (queue.length === 0) {
-        updateQueueInfo();
-        return;
-      }
-
-      const remaining = [];
-
-      for (const item of queue) {
-        try {
-          await sendResult(item);
-        } catch (error) {
-          console.warn("Send failed:", error);
-          remaining.push(item);
-        }
-      }
-
-      setQueue(remaining);
-
-      if (remaining.length === 0) {
-        setStatus("Барлық нәтиже жіберілді");
-      } else {
-        setStatus("Кейбір нәтиже жіберілмеді", "offline");
-      }
+    function resetCounter() {
+        stopTracking();
+        steps = 0;
+        lastStepTime = 0;
+        updateUI();
+        setStatus("Қайта бастауға дайын");
     }
 
     registerForm.addEventListener("submit", (event) => {
-      event.preventDefault();
+        event.preventDefault();
 
-      const user = {
-        fullName: registerForm.fullName.value.trim(),
-        year: registerForm.year.value.trim(),
-        city: registerForm.city.value.trim(),
-        phone: registerForm.phone.value.trim(),
-        savedAt: new Date().toISOString()
-      };
+        const user = {
+            fullName: registerForm.fullName.value.trim(),
+            year: registerForm.year.value.trim(),
+            city: registerForm.city.value.trim(),
+            phone: registerForm.phone.value.trim(),
+            savedAt: new Date().toISOString()
+        };
 
-      saveUser(user);
-      showTracker();
+        saveUser(user);
+        showTracker();
     });
 
     startBtn.addEventListener("click", startTracking);
     stopBtn.addEventListener("click", stopTracking);
-    sendBtn.addEventListener("click", () => {
-      const result = buildResultPayload();
-      saveToQueue(result);
-      syncQueue();
-    });
-
-    resetUserBtn.addEventListener("click", () => {
-      showRegister(getUser());
-    });
-
-    window.addEventListener("online", syncQueue);
-    window.addEventListener("offline", () => {
-      setStatus("Офлайн режим", "offline");
-    });
+    resetBtn.addEventListener("click", resetCounter);
+    resetUserBtn.addEventListener("click", () => showRegister(getUser()));
 
     const savedUser = getUser();
     if (savedUser) {
-      showTracker();
-      syncQueue();
+        showTracker();
     } else {
-      showRegister();
+        showRegister();
     }
-  </script>
+</script>
 </body>
 </html>
