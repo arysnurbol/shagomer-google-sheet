@@ -251,8 +251,8 @@
     const INTERVAL_MAX_BASE = 1420;
     const RHYTHM_MAX_DIFF_MS = 340;
 
-    const ROTATION_REJECT_RAD_S = 2.15;
-    const ROTATION_SOFT_RAD_S = 1.4;
+    const ROTATION_REJECT_RAD_S = 3.75;
+    const ROTATION_SOFT_RAD_S = 2.2;
     const STRONG_STEP_BAND = 2.75;
     const NON_WALKING_BURST_BAND = 5.1;
     const MIN_ACTIVE_BAND_MULT = 1.65;
@@ -743,12 +743,19 @@
         const cadAvg = recentIntervals.length
             ? recentIntervals.reduce((s, v) => s + v, 0) / recentIntervals.length
             : (getStepProfile().avgStepIntervalMs || 520);
-        const rotHard = ROTATION_REJECT_RAD_S * (cadAvg < 520 ? 1.08 : 1);
-        const rotSoft = ROTATION_SOFT_RAD_S * (cadAvg < 520 ? 1.05 : 1);
+        const rotHard = ROTATION_REJECT_RAD_S * (cadAvg < 520 ? 1.06 : 1);
+        const rotSoft = ROTATION_SOFT_RAD_S * (cadAvg < 520 ? 1.04 : 1);
 
+        /*
+         * Рука: очень большой ω при почти тишине по bandAbs.
+         * Не использовать bandAbs < thr*1.22 — между шагами bandAbs часто ниже порога,
+         * из‑за чего при нормальной ходьбе срабатывало «взмах» сотни раз.
+         */
+        const bandQuietVsPeak = bandAbs < thr * 0.4 && bandAbs < noiseMean * 2.15;
         const looksLikeHandSwing =
-            smoothRotation > rotHard && bandAbs < STRONG_STEP_BAND ||
-            smoothRotation > rotSoft && bandAbs < thr * 1.22;
+            isWalkingConfirmed
+                ? smoothRotation > 7.8 && bandAbs < noiseMean * 1.35
+                : smoothRotation > rotHard && bandQuietVsPeak && bandAbs < STRONG_STEP_BAND * 0.9;
 
         const burstTh = NON_WALKING_BURST_BAND * (isWalkingConfirmed ? 0.9 : 1);
         const looksLikeNonWalkingBurst = !isWalkingConfirmed && bandAbs > burstTh;
