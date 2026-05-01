@@ -189,8 +189,9 @@
         <label for="city">Город</label>
         <input id="city" name="city" required placeholder="Например: Москва" />
 
-        <label for="phone">Телефон</label>
-        <input id="phone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7..." />
+        <label for="phone">Телефон (Беларусь)</label>
+        <input id="phone" name="phone" type="tel" required inputmode="numeric" autocomplete="tel"
+            placeholder="+375(29)123-45-67" maxlength="18" title="Формат: +375(XX)XXX-XX-XX" />
 
         <button class="btn-primary" type="submit">Сохранить</button>
     </form>
@@ -268,6 +269,7 @@
     let isWalkingConfirmed = false;
 
     const registerForm = document.getElementById("registerForm");
+    const phoneInput = document.getElementById("phone");
     const tracker = document.getElementById("tracker");
     const statusBox = document.getElementById("statusBox");
     const stepsValue = document.getElementById("stepsValue");
@@ -288,6 +290,93 @@
 
     function saveUser(user) {
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    }
+
+    const BY_PHONE_TOTAL_DIGITS = 12;
+    const BY_VALID_2DIGIT_NDC = new Set([
+        "15", "16", "17", "21", "22", "23", "24", "25", "29", "33", "44", "54"
+    ]);
+
+    function getPhoneDigitsOnly(str) {
+        return String(str || "").replace(/\D/g, "");
+    }
+
+    function normalizeBelarusPhoneDigits(rawDigits) {
+        let d = getPhoneDigitsOnly(rawDigits);
+        if (d.startsWith("375")) {
+            return d.slice(0, BY_PHONE_TOTAL_DIGITS);
+        }
+        d = d.replace(/^0+/, "");
+        return ("375" + d).slice(0, BY_PHONE_TOTAL_DIGITS);
+    }
+
+    function formatBelarusPhoneDisplay(d12) {
+        const full = normalizeBelarusPhoneDigits(d12);
+        const nat = full.startsWith("375") ? full.slice(3) : full;
+        const a = nat.slice(0, 9);
+        if (a.length === 0) return "+375(";
+        if (a.length === 1) return `+375(${a}`;
+        if (a.length === 2) return `+375(${a})`;
+        const tail = a.slice(2);
+        let out = `+375(${a.slice(0, 2)})${tail.slice(0, 3)}`;
+        if (tail.length <= 3) return out;
+        out += `-${tail.slice(3, 5)}`;
+        if (tail.length <= 5) return out;
+        return `${out}-${tail.slice(5, 9)}`;
+    }
+
+    function isCompleteBelarusPhone(d12) {
+        const d = normalizeBelarusPhoneDigits(d12);
+        if (d.length !== BY_PHONE_TOTAL_DIGITS || !d.startsWith("375")) return false;
+        return BY_VALID_2DIGIT_NDC.has(d.slice(3, 5));
+    }
+
+    function countDigitsLeftOfCaret(value, caret) {
+        return getPhoneDigitsOnly(value.slice(0, Math.min(caret, value.length))).length;
+    }
+
+    function caretAfterDigitIndex(formatted, digitIndex) {
+        if (digitIndex <= 0) return 0;
+        let seen = 0;
+        for (let i = 0; i < formatted.length; i++) {
+            if (/\d/.test(formatted[i])) {
+                seen += 1;
+                if (seen === digitIndex) return i + 1;
+            }
+        }
+        return formatted.length;
+    }
+
+    function applyBelarusPhoneMaskFromDigits(input, d12, caretDigitIndex) {
+        const formatted = formatBelarusPhoneDisplay(d12);
+        input.value = formatted;
+        const pos = caretAfterDigitIndex(formatted, caretDigitIndex);
+        input.setSelectionRange(pos, pos);
+    }
+
+    function attachBelarusPhoneField(input) {
+        input.addEventListener("input", () => {
+            const before = input.value;
+            const caret = input.selectionStart ?? before.length;
+            const idx = countDigitsLeftOfCaret(before, caret);
+            const digits = normalizeBelarusPhoneDigits(getPhoneDigitsOnly(before));
+            applyBelarusPhoneMaskFromDigits(input, digits, idx);
+        });
+        input.addEventListener("focus", () => {
+            if (!getPhoneDigitsOnly(input.value)) input.value = "+375(";
+        });
+        input.addEventListener("blur", () => {
+            const d = normalizeBelarusPhoneDigits(input.value);
+            input.value = d.length ? formatBelarusPhoneDisplay(d) : "";
+            input.setCustomValidity("");
+        });
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Backspace" && getPhoneDigitsOnly(input.value).length <= 3) {
+                e.preventDefault();
+                input.value = "+375(";
+                input.setSelectionRange(5, 5);
+            }
+        });
     }
 
     function setStatus(message, type = "") {
@@ -319,7 +408,8 @@
             registerForm.fullName.value = user.fullName || "";
             registerForm.year.value = user.year || "";
             registerForm.city.value = user.city || "";
-            registerForm.phone.value = user.phone || "";
+            const pd = user.phone ? normalizeBelarusPhoneDigits(user.phone) : "";
+            registerForm.phone.value = pd ? formatBelarusPhoneDisplay(pd) : "";
         }
     }
 
@@ -591,17 +681,29 @@
     registerForm.addEventListener("submit", (event) => {
         event.preventDefault();
 
+        const phoneDigits = normalizeBelarusPhoneDigits(phoneInput.value);
+        if (!isCompleteBelarusPhone(phoneDigits)) {
+            phoneInput.setCustomValidity(
+                "Только номер РБ: +375(XX)XXX-XX-XX (коды 15–17, 21–25, 29, 33, 44, 54)"
+            );
+            phoneInput.reportValidity();
+            return;
+        }
+        phoneInput.setCustomValidity("");
+
         const user = {
             fullName: registerForm.fullName.value.trim(),
             year: registerForm.year.value.trim(),
             city: registerForm.city.value.trim(),
-            phone: registerForm.phone.value.trim(),
+            phone: formatBelarusPhoneDisplay(phoneDigits),
             savedAt: new Date().toISOString()
         };
 
         saveUser(user);
         showTracker();
     });
+
+    attachBelarusPhoneField(phoneInput);
 
     startBtn.addEventListener("click", startTracking);
     stopBtn.addEventListener("click", stopTracking);
