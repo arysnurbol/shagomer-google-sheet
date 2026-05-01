@@ -223,8 +223,8 @@
 <script>
     const STORAGE_KEY_USER = "shagomer_user";
 
-    // Google Sheets келесі этапта қосылады.
-    // Қазір false тұр, сондықтан ешқайда жібермейді.
+    // Google Sheets будет подключён на следующем этапе.
+    // Сейчас false — никуда не отправляет.
     const GOOGLE_SHEETS_ENABLED = false;
     const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
 
@@ -238,8 +238,8 @@
     const INACTIVITY_RESET_MS = 1300;
 
     // Anti-hand-swing filter v2:
-    // Бұрын rotation filter тым қатты болды, сондықтан real step-тер көп жоғалды.
-    // Енді rotation тек қозғалыс әлсіз болғанда ғана reject жасайды.
+    // Раньше фильтр по вращению был слишком жёстким — терялись реальные шаги.
+    // Теперь вращение отсекается только при слабом ускорении.
     const ROTATION_REJECT_THRESHOLD = 120;
     const ROTATION_SOFT_REJECT_THRESHOLD = 78;
     const MIN_ACTIVE_MOTION = 0.45;
@@ -385,14 +385,14 @@
 
         const requiredSteps = strictReconfirmMode ? STRICT_RECONFIRM_STEPS : WALKING_CONFIRM_STEPS;
 
-        // Normal start: 5 ритмді импульс керек.
-        // Тоқтағаннан кейін: 8 ритмді импульс керек.
-        // Осылайша отырып телефонды қолға қозғау, столға қою сияқты қысқа қозғалыстар қадамға айналмайды.
+        // Обычный старт: нужны 5 ритмичных импульсов.
+        // После паузы: 8 ритмичных импульсов.
+        // Так короткие движения (покачивание в руке сидя, постановка на стол) не становятся шагами.
         if (!isWalkingConfirmed && pendingSteps >= requiredSteps) {
             isWalkingConfirmed = true;
 
-            // Strict mode-та buffered қадамдарды толық қоспаймыз.
-            // Себебі inactivity-тен кейінгі алғашқы импульстердің бір бөлігі қол қозғалысы болуы мүмкін.
+            // В строгом режиме не добавляем буфер шагов целиком.
+            // Часть первых импульсов после простоя может быть движением руки.
             steps += strictReconfirmMode ? Math.max(1, Math.round(requiredSteps * 0.45)) : requiredSteps;
             strictReconfirmMode = false;
             updateUI();
@@ -434,8 +434,8 @@
         const now = Date.now();
 
         if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
-            // Адам тоқтағаннан кейін телефонды қолға алып қозғау жиі false step береді.
-            // Сондықтан inactivity-тен кейін жаңа жүрісті strict mode арқылы ғана растаймыз.
+            // После остановки взятие телефона в руку часто даёт ложные шаги.
+            // После простоя новую ходьбу подтверждаем только строгим режимом.
             resetRhythmOnly(true);
         }
 
@@ -447,8 +447,8 @@
             smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION ||
             smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.15;
 
-        // Отыру, телефонды столға қою, қолға алып жан-жаққа созу сияқты әрекеттерде
-        // қысқа, қатты burst болады. Жүріс әлі confirmed болмаса, мұндай burst-ті қадамға айналдырмаймыз.
+        // При сиденье, постановке на стол, размахивании в руке возникает
+        // короткий сильный всплеск. Пока ходьба не подтверждена, не считаем его шагом.
         const looksLikeNonWalkingBurst = !isWalkingConfirmed && magnitude > NON_WALKING_BURST_MOTION;
 
         if (looksLikeHandSwing || looksLikeNonWalkingBurst) {
