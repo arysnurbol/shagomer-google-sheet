@@ -229,20 +229,28 @@
     const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
 
     const STEP_LENGTH_METERS = 0.75;
-    const STEP_PEAK_THRESHOLD = 1.45;
-    const STEP_MIN_INTERVAL_MS = 280;
-    const STEP_MAX_INTERVAL_MS = 1250;
-    const WALKING_CONFIRM_STEPS = 3;
-    const GRAVITY_BASELINE = 9.81;
-    const INACTIVITY_RESET_MS = 1600;
 
-    // Anti-hand-swing filter v2:
-    // Раньше фильтр по вращению был слишком жёстким — терялись реальные шаги.
-    // Теперь вращение отсекает только при относительно слабом ускорении.
-    const ROTATION_REJECT_THRESHOLD = 130;
-    const ROTATION_SOFT_REJECT_THRESHOLD = 85;
-    const MIN_ACTIVE_MOTION = 0.45;
-    const STRONG_STEP_MOTION = 2.6;
+    // Консервативная настройка под реальную ходьбу в кармане.
+    // В старой версии порог был слишком низкий, поэтому один шаг часто
+    // считался как 1–2 пика. На вашем тесте приложение дало 40 вместо 23.
+    const STEP_PEAK_THRESHOLD = 1.85;
+    const STEP_FALL_RATIO = 0.58;
+    const STEP_MIN_INTERVAL_MS = 390;
+    const STEP_MAX_INTERVAL_MS = 1300;
+    const WALKING_CONFIRM_STEPS = 4;
+    const INACTIVITY_RESET_MS = 2200;
+
+    // Динамическая гравитация: телефон может быть наклонён, поэтому
+    // нельзя постоянно вычитать ровно 9.81.
+    const GRAVITY_ALPHA = 0.985;
+    const MOTION_SMOOTH_ALPHA = 0.62;
+
+    // Фильтр взмахов рукой: отсекаем сильное вращение телефона,
+    // но не душим нормальную ходьбу.
+    const ROTATION_REJECT_THRESHOLD = 115;
+    const ROTATION_SOFT_REJECT_THRESHOLD = 75;
+    const STRONG_STEP_MOTION = 3.0;
+
 
     let steps = 0;
     let pendingSteps = 0;
@@ -250,6 +258,8 @@
     let lastStepTime = 0;
     let lastMagnitude = 0;
     let lastRotationMagnitude = 0;
+    let peakMagnitude = 0;
+    let gravityEstimate = 0;
     let wasAbovePeak = false;
     let recentIntervals = [];
     let motionEventsCount = 0;
@@ -337,6 +347,8 @@
         lastStepTime = 0;
         lastMagnitude = 0;
         lastRotationMagnitude = 0;
+        peakMagnitude = 0;
+        gravityEstimate = 0;
         wasAbovePeak = false;
         recentIntervals = [];
         motionEventsCount = 0;
@@ -349,6 +361,7 @@
     function resetRhythmOnly() {
         pendingSteps = 0;
         lastStepTime = 0;
+        peakMagnitude = 0;
         wasAbovePeak = false;
         recentIntervals = [];
         isWalkingConfirmed = false;
@@ -391,23 +404,47 @@
         }
     }
 
-    function handleMotion(event) {
-        if (!isRunning) return;
-
-        motionEventsCount += 1;
-
-        const acc = event.accelerationIncludingGravity || event.acceleration;
-        if (!acc) {
-            sensorInfo.textContent = "Сенсор: нет данных";
-            return;
+    function getMotionMagnitude(event) {
+        // На Android часто есть acceleration без гравитации — он точнее.
+        // Если браузер даёт только accelerationIncludingGravity, используем
+        // медленный baseline гравитации и считаем отклонение от него.
+        const linearAcc = event.acceleration;
+        if (linearAcc && (linearAcc.x !== null || linearAcc.y !== null || linearAcc.z !== null)) {
+            const lx = linearAcc.x || 0;
+            const ly = linearAcc.y || 0;
+            const lz = linearAcc.z || 0;
+            return Math.sqrt(lx * lx + ly * ly + lz * lz);
         }
+
+        const acc = event.accelerationIncludingGravity;
+        if (!acc) return null;
 
         const x = acc.x || 0;
         const y = acc.y || 0;
         const z = acc.z || 0;
         const totalMagnitude = Math.sqrt(x * x + y * y + z * z);
-        const movement = Math.abs(totalMagnitude - GRAVITY_BASELINE);
-        const magnitude = lastMagnitude * 0.55 + movement * 0.45;
+
+        if (!gravityEstimate) {
+            gravityEstimate = totalMagnitude;
+        } else {
+            gravityEstimate = gravityEstimate * GRAVITY_ALPHA + totalMagnitude * (1 - GRAVITY_ALPHA);
+        }
+
+        return Math.abs(totalMagnitude - gravityEstimate);
+    }
+
+    function handleMotion(event) {
+        if (!isRunning) return;
+
+        motionEventsCount += 1;
+
+        const rawMagnitude = getMotionMagnitude(event);
+        if (rawMagnitude === null) {
+            sensorInfo.textContent = "Сенсор: нет данных";
+            return;
+        }
+
+        const magnitude = lastMagnitude * MOTION_SMOOTH_ALPHA + rawMagnitude * (1 - MOTION_SMOOTH_ALPHA);
 
         const rotation = event.rotationRate || { alpha: 0, beta: 0, gamma: 0 };
         const rotationMagnitude = Math.sqrt(
@@ -415,7 +452,7 @@
             Math.pow(rotation.beta || 0, 2) +
             Math.pow(rotation.gamma || 0, 2)
         );
-        const smoothRotation = lastRotationMagnitude * 0.65 + rotationMagnitude * 0.35;
+        const smoothRotation = lastRotationMagnitude * 0.7 + rotationMagnitude * 0.3;
 
         const now = Date.now();
 
@@ -423,17 +460,18 @@
             resetRhythmOnly();
         }
 
-        if (magnitude > MIN_ACTIVE_MOTION) {
+        if (magnitude > STEP_PEAK_THRESHOLD * 0.45) {
             lastMotionTime = now;
         }
 
         const looksLikeHandSwing =
-            smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION ||
-            smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.15;
+            (smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION) ||
+            (smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.05);
 
         if (looksLikeHandSwing) {
             rejectedHandSwings += 1;
             wasAbovePeak = false;
+            peakMagnitude = 0;
             lastMagnitude = magnitude;
             lastRotationMagnitude = smoothRotation;
 
@@ -447,26 +485,30 @@
             sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | rot: ${smoothRotation.toFixed(0)} | events: ${motionEventsCount}`;
         }
 
-        const isPeak = magnitude > STEP_PEAK_THRESHOLD;
-        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.72;
-
-        if (isPeak) {
+        if (magnitude > STEP_PEAK_THRESHOLD) {
             wasAbovePeak = true;
+            peakMagnitude = Math.max(peakMagnitude, magnitude);
         }
 
+        const fallThreshold = Math.max(STEP_PEAK_THRESHOLD * STEP_FALL_RATIO, peakMagnitude * STEP_FALL_RATIO);
+        const hasFallen = wasAbovePeak && magnitude < fallThreshold;
+
         if (hasFallen) {
-            const interval = lastStepTime ? now - lastStepTime : 600;
+            const interval = lastStepTime ? now - lastStepTime : 650;
 
             if (isWalkingRhythm(interval)) {
                 acceptStep();
                 lastStepTime = now;
             } else {
+                // Бұл жерде қадамды бірден қоспаймыз. Тек жаңа ырғақтың
+                // басталуы болуы мүмкін деп белгілейміз.
                 resetRhythmOnly();
                 lastStepTime = now;
                 pendingSteps = 1;
             }
 
             wasAbovePeak = false;
+            peakMagnitude = 0;
         }
 
         lastMagnitude = magnitude;
