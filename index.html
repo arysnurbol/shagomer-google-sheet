@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="kk">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -177,118 +177,87 @@
 <body>
 <main class="app">
     <h1>ШАГОМЕР</h1>
-    <p class="subtitle">MVP: счётчик шагов в браузере</p>
+    <p class="subtitle">MVP: браузердегі қадам санағыш</p>
 
     <form id="registerForm">
         <label for="fullName">ФИО</label>
-        <input id="fullName" name="fullName" required autocomplete="name" placeholder="Фамилия Имя Отчество" />
+        <input id="fullName" name="fullName" required autocomplete="name" placeholder="Аты-жөніңіз" />
 
-        <label for="year">Год / год рождения</label>
-        <input id="year" name="year" required inputmode="numeric" placeholder="Например: 2001" />
+        <label for="year">Жыл / туған жыл</label>
+        <input id="year" name="year" required inputmode="numeric" placeholder="Мысалы: 2001" />
 
-        <label for="city">Город</label>
-        <input id="city" name="city" required placeholder="Например: Москва" />
+        <label for="city">Қала</label>
+        <input id="city" name="city" required placeholder="Мысалы: Алматы" />
 
-        <label for="phone">Телефон (Беларусь)</label>
-        <input id="phone" name="phone" type="tel" required inputmode="numeric" autocomplete="tel"
-            placeholder="+375(29)123-45-67" maxlength="18" title="Формат: +375(XX)XXX-XX-XX" />
+        <label for="phone">Телефон</label>
+        <input id="phone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7..." />
 
-        <button class="btn-primary" type="submit">Сохранить</button>
+        <button class="btn-primary" type="submit">Сақтау</button>
     </form>
 
     <section id="tracker" class="section hidden">
-        <div class="status" id="statusBox">Готово</div>
+        <div class="status" id="statusBox">Дайын</div>
 
         <div class="stats">
             <div class="stat">
                 <strong id="stepsValue">0</strong>
-                <span>шагов</span>
+                <span>қадам</span>
             </div>
             <div class="stat">
                 <strong id="metersValue">0</strong>
-                <span>метров</span>
+                <span>метр</span>
             </div>
         </div>
 
         <button id="startBtn" class="btn-success" type="button">СТАРТ</button>
         <button id="stopBtn" class="btn-danger" type="button" disabled>СТОП</button>
-        <button id="resetBtn" class="btn-secondary" type="button">Сбросить</button>
-        <button id="resetUserBtn" class="btn-secondary" type="button">Изменить профиль</button>
-        <button id="calibBtn" class="btn-secondary" type="button">Калибровка (10 шагов)</button>
-        <p class="small hidden" id="calibHint">Нажмите СТАРТ и пройдите ровно 10 ровных шагов. Остановка — кнопка СТОП или автоматически после 10 шагов.</p>
+        <button id="resetBtn" class="btn-secondary" type="button">Қайта бастау</button>
+        <button id="resetUserBtn" class="btn-secondary" type="button">Профильді өзгерту</button>
 
-        <p class="small" id="sensorInfo">Сенсор: ожидание</p>
-        <p class="small">Держите телефон в переднем кармане брюк или застегните в куртке. Идите ровно 20–30 шагов по прямой, затем СТОП — счётчик должен прибавиться.</p>
-        <p class="small"><strong>Samsung (Chrome):</strong> сайт только по <strong>HTTPS</strong> (как у вас на Vercel). Нажмите СТАРТ, дайте доступ к движению если спросит. Для проверки: настройки Chrome → «Настройки сайта» → убедитесь, что датчики движения не заблокированы. Не закрывайте вкладку в фоне на время теста.</p>
-        <p class="small">На iOS после СТАРТ запрашивается доступ к датчику движения.</p>
+        <p class="small" id="sensorInfo">Сенсор: күтіп тұр</p>
+        <p class="small">Дәлірек санау үшін телефонды қалтаға немесе денеге жақын ұстаңыз. Қатты қол сермеу gyroscope filter арқылы reject болады.</p>
+        <p class="small">iOS-та СТАРТ басқаннан кейін қозғалыс датчигіне рұқсат сұралады. Телефонда және HTTPS-та тестілеңіз.</p>
     </section>
 </main>
 
 <script>
     const STORAGE_KEY_USER = "shagomer_user";
 
-    // Google Sheets будет подключён на следующем этапе.
-    // Сейчас false — никуда не отправляет.
+    // Google Sheets келесі этапта қосылады.
+    // Қазір false тұр, сондықтан ешқайда жібермейді.
     const GOOGLE_SHEETS_ENABLED = false;
     const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
 
-    const STORAGE_KEY_STEP_PROFILE = "shagomer_step_profile";
-    const STEP_LENGTH_DEFAULT = 0.75;
-    const WALKING_CONFIRM_STEPS = 1;
-    const STRICT_RECONFIRM_STEPS = 4;
-    const INACTIVITY_RESET_MS = 1800;
-    const REFRACTORY_MS = 200;
+    const STEP_LENGTH_METERS = 0.75;
+    const STEP_PEAK_THRESHOLD = 1.45;
+    const STEP_MIN_INTERVAL_MS = 280;
+    const STEP_MAX_INTERVAL_MS = 1250;
+    const WALKING_CONFIRM_STEPS = 3;
+    const GRAVITY_BASELINE = 9.81;
+    const INACTIVITY_RESET_MS = 1600;
 
-    const EMA_FAST_BETA = 0.38;
-    const EMA_SLOW_BETA = 0.065;
-    const GRAVITY_ALPHA_PER_S = 0.85;
-    const NOISE_RING_MAX = 52;
-
-    /** Простой режим: порог ближе к слабому сигналу телефонов (см. «бп» vs магнитуда). */
-    const ADAPT_THRESH_K = 2.05;
-    const ADAPT_THRESH_FLOOR = 0.1;
-    const ADAPT_THRESH_CAP = 0.58;
-
-    const INTERVAL_MIN_BASE = 240;
-    const INTERVAL_MAX_BASE = 1550;
-
-    const MIN_ACTIVE_SIGNAL_MULT = 1.35;
-
-    const CADENCE_JUMP_RESET_RATIO = 2.85;
-
-    const isIOSWebKit = /iPhone|iPad|iPod/i.test(navigator.userAgent) && !/Windows Phone/i.test(navigator.userAgent);
+    // Anti-hand-swing filter v2:
+    // Бұрын rotation filter тым қатты болды, сондықтан real step-тер көп жоғалды.
+    // Енді rotation тек қозғалыс әлсіз болғанда ғана reject жасайды.
+    const ROTATION_REJECT_THRESHOLD = 130;
+    const ROTATION_SOFT_REJECT_THRESHOLD = 85;
+    const MIN_ACTIVE_MOTION = 0.45;
+    const STRONG_STEP_MOTION = 2.6;
 
     let steps = 0;
     let pendingSteps = 0;
     let isRunning = false;
     let lastStepTime = 0;
-    let lastBandAbs = 0;
+    let lastMagnitude = 0;
     let lastRotationMagnitude = 0;
     let wasAbovePeak = false;
     let recentIntervals = [];
     let motionEventsCount = 0;
     let lastMotionTime = 0;
-    let lastDevicemotionTs = 0;
+    let rejectedHandSwings = 0;
     let isWalkingConfirmed = false;
-    let strictReconfirmMode = false;
-    let lastIntervalMs = 0;
-    let gEst = null;
-    let emaFast = 0;
-    let emaSlow = 0;
-    let emaHasInit = false;
-    const noiseRing = [];
-    let hiddenAtMs = 0;
-    let magSmooth = 0;
-    let magSmoothInit = false;
-
-    let calibrationActive = false;
-    let calibrationPendingUi = false;
-    let calibrationLastPeakTs = 0;
-    let calibrationIntervals = [];
-    let calibrationPeakCount = 0;
 
     const registerForm = document.getElementById("registerForm");
-    const phoneInput = document.getElementById("phone");
     const tracker = document.getElementById("tracker");
     const statusBox = document.getElementById("statusBox");
     const stepsValue = document.getElementById("stepsValue");
@@ -298,26 +267,6 @@
     const resetBtn = document.getElementById("resetBtn");
     const resetUserBtn = document.getElementById("resetUserBtn");
     const sensorInfo = document.getElementById("sensorInfo");
-    const calibBtn = document.getElementById("calibBtn");
-    const calibHint = document.getElementById("calibHint");
-
-    function getStepProfile() {
-        try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY_STEP_PROFILE)) || {};
-        } catch {
-            return {};
-        }
-    }
-
-    function saveStepProfile(patch) {
-        const cur = getStepProfile();
-        localStorage.setItem(STORAGE_KEY_STEP_PROFILE, JSON.stringify({ ...cur, ...patch, version: 1 }));
-    }
-
-    function getStepStrideMeters() {
-        const p = getStepProfile();
-        return typeof p.strideMeters === "number" && p.strideMeters > 0.2 ? p.strideMeters : STEP_LENGTH_DEFAULT;
-    }
 
     function getUser() {
         try {
@@ -331,109 +280,13 @@
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
     }
 
-    const BY_PHONE_TOTAL_DIGITS = 12; // 375 + 9 национальных
-    /** Двухзначные коды ABC после +375 (моб. и основные зоны). */
-    const BY_VALID_2DIGIT_NDC = new Set([
-        "15", "16", "17", "21", "22", "23", "24", "25", "29", "33", "44", "54"
-    ]);
-
-    function getPhoneDigitsOnly(str) {
-        return String(str || "").replace(/\D/g, "");
-    }
-
-    /** Нормализация в строку из 12 цифр: 375 + до 9 следующих (только ввод в формате РБ). */
-    function normalizeBelarusPhoneDigits(rawDigits) {
-        let d = getPhoneDigitsOnly(rawDigits);
-        if (d.startsWith("375")) {
-            return d.slice(0, BY_PHONE_TOTAL_DIGITS);
-        }
-        d = d.replace(/^0+/, "");
-        return ("375" + d).slice(0, BY_PHONE_TOTAL_DIGITS);
-    }
-
-    /** +375(##)###-##-## */
-    function formatBelarusPhoneDisplay(d12) {
-        const full = normalizeBelarusPhoneDigits(d12);
-        const nat = full.startsWith("375") ? full.slice(3) : full;
-        const a = nat.slice(0, 9);
-        if (a.length === 0) return "+375(";
-        if (a.length === 1) return `+375(${a}`;
-        if (a.length === 2) return `+375(${a})`;
-        const tail = a.slice(2);
-        let out = `+375(${a.slice(0, 2)})${tail.slice(0, 3)}`;
-        if (tail.length <= 3) return out;
-        out += `-${tail.slice(3, 5)}`;
-        if (tail.length <= 5) return out;
-        return `${out}-${tail.slice(5, 9)}`;
-    }
-
-    function isCompleteBelarusPhone(d12) {
-        const d = normalizeBelarusPhoneDigits(d12);
-        if (d.length !== BY_PHONE_TOTAL_DIGITS || !d.startsWith("375")) return false;
-        const ndc2 = d.slice(3, 5);
-        return BY_VALID_2DIGIT_NDC.has(ndc2);
-    }
-
-    function countDigitsLeftOfCaret(value, caret) {
-        return getPhoneDigitsOnly(value.slice(0, Math.min(caret, value.length))).length;
-    }
-
-    function caretAfterDigitIndex(formatted, digitIndex) {
-        if (digitIndex <= 0) return 0;
-        let seen = 0;
-        for (let i = 0; i < formatted.length; i++) {
-            if (/\d/.test(formatted[i])) {
-                seen += 1;
-                if (seen === digitIndex) return i + 1;
-            }
-        }
-        return formatted.length;
-    }
-
-    function applyBelarusPhoneMaskFromDigits(input, d12, caretDigitIndex) {
-        const formatted = formatBelarusPhoneDisplay(d12);
-        input.value = formatted;
-        const pos = caretAfterDigitIndex(formatted, caretDigitIndex);
-        input.setSelectionRange(pos, pos);
-    }
-
-    function attachBelarusPhoneField(input) {
-        const onChange = () => {
-            const before = input.value;
-            const caret = input.selectionStart ?? before.length;
-            const idx = countDigitsLeftOfCaret(before, caret);
-            const digits = normalizeBelarusPhoneDigits(getPhoneDigitsOnly(before));
-            applyBelarusPhoneMaskFromDigits(input, digits, idx);
-        };
-
-        input.addEventListener("input", onChange);
-        input.addEventListener("focus", () => {
-            if (!getPhoneDigitsOnly(input.value)) {
-                input.value = "+375(";
-            }
-        });
-        input.addEventListener("blur", () => {
-            const d = normalizeBelarusPhoneDigits(input.value);
-            input.value = d.length ? formatBelarusPhoneDisplay(d) : "";
-            input.setCustomValidity("");
-        });
-
-        input.addEventListener("keydown", (e) => {
-            if (e.key === "Backspace" && getPhoneDigitsOnly(input.value).length <= 3) {
-                e.preventDefault();
-                input.value = "+375(";
-                input.setSelectionRange(5, 5);
-            }
-        });
-    }
-
     function setStatus(message, type = "") {
         statusBox.className = `status ${type}`.trim();
         statusBox.textContent = message;
     }
 
     function getMeters() {
-        return Math.round(steps * getStepStrideMeters());
+        return Math.round(steps * STEP_LENGTH_METERS);
     }
 
     function updateUI() {
@@ -444,7 +297,7 @@
     function showTracker() {
         registerForm.classList.add("hidden");
         tracker.classList.remove("hidden");
-        setStatus("Готово");
+        setStatus("Дайын");
         updateUI();
     }
 
@@ -456,14 +309,13 @@
             registerForm.fullName.value = user.fullName || "";
             registerForm.year.value = user.year || "";
             registerForm.city.value = user.city || "";
-            const pd = user.phone ? normalizeBelarusPhoneDigits(user.phone) : "";
-            registerForm.phone.value = pd ? formatBelarusPhoneDisplay(pd) : "";
+            registerForm.phone.value = user.phone || "";
         }
     }
 
     async function requestMotionPermission() {
         if (typeof DeviceMotionEvent === "undefined") {
-            setStatus("Этот браузер не поддерживает датчик движения", "error");
+            setStatus("Бұл браузер қозғалыс датчигін қолдамайды", "error");
             return false;
         }
 
@@ -483,199 +335,60 @@
     function resetStepAlgorithm() {
         pendingSteps = 0;
         lastStepTime = 0;
-        lastBandAbs = 0;
+        lastMagnitude = 0;
         lastRotationMagnitude = 0;
         wasAbovePeak = false;
         recentIntervals = [];
         motionEventsCount = 0;
         lastMotionTime = 0;
-        lastDevicemotionTs = 0;
+        rejectedHandSwings = 0;
         isWalkingConfirmed = false;
-        strictReconfirmMode = false;
-        lastIntervalMs = 0;
-        gEst = null;
-        emaFast = 0;
-        emaSlow = 0;
-        emaHasInit = false;
-        magSmooth = 0;
-        magSmoothInit = false;
-        noiseRing.length = 0;
-        sensorInfo.textContent = "Сенсор: ожидание";
+        sensorInfo.textContent = "Сенсор: күтіп тұр";
     }
 
-    function resetRhythmOnly(strict = false) {
+    function resetRhythmOnly() {
         pendingSteps = 0;
         lastStepTime = 0;
         wasAbovePeak = false;
         recentIntervals = [];
-        lastIntervalMs = 0;
         isWalkingConfirmed = false;
-        strictReconfirmMode = strict;
     }
 
-    function softResyncCadence() {
-        pendingSteps = Math.min(pendingSteps, 2);
-        if (recentIntervals.length > 2) recentIntervals = recentIntervals.slice(-2);
-    }
-
-    function pushNoiseSample(val) {
-        noiseRing.push(val);
-        if (noiseRing.length > NOISE_RING_MAX) noiseRing.shift();
-    }
-
-    function noiseStats() {
-        const n = noiseRing.length;
-        if (n < 10) return { mean: 0.06, std: 0.025 };
-        const arr = noiseRing.slice(-40);
-        const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
-        const variance = arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length;
-        return { mean, std: Math.sqrt(variance) || 0.02 };
-    }
-
-    function adaptivePeakThreshold() {
-        const { mean, std } = noiseStats();
-        const prof = getStepProfile();
-        let t = Math.max(ADAPT_THRESH_FLOOR, mean + std * ADAPT_THRESH_K);
-        if (typeof prof.noiseBand === "number" && prof.noiseBand > 0 && prof.noiseBand < 0.36) {
-            t = Math.max(t, prof.noiseBand * 1.08);
-        }
-        return Math.min(ADAPT_THRESH_CAP, t);
-    }
-
-    function cadenceBounds() {
-        const prof = getStepProfile();
-        let ref = recentIntervals.length
-            ? recentIntervals.reduce((s, v) => s + v, 0) / recentIntervals.length
-            : (prof.avgStepIntervalMs || 550);
-        if (typeof prof.avgStepIntervalMs === "number" && prof.avgStepIntervalMs > 0) {
-            ref = ref * 0.5 + prof.avgStepIntervalMs * 0.5;
-        }
-        const minI = Math.max(INTERVAL_MIN_BASE, Math.min(420, ref * 0.33));
-        const maxI = Math.min(INTERVAL_MAX_BASE, Math.max(780, ref * 2.35));
-        return { minI, maxI };
-    }
-
-    /** Только диапазон интервала — без «жёсткой» дисперсии (проще для Samsung / браузера). */
     function isWalkingRhythm(interval) {
-        const { minI, maxI } = cadenceBounds();
-        if (interval < minI || interval > maxI) return false;
+        if (interval < STEP_MIN_INTERVAL_MS || interval > STEP_MAX_INTERVAL_MS) {
+            return false;
+        }
 
         recentIntervals.push(interval);
-        if (recentIntervals.length > 4) recentIntervals.shift();
-        return true;
-    }
-
-    function rotationVecRadPerSec(r) {
-        const toRad = isIOSWebKit ? Math.PI / 180 : 1;
-        return {
-            x: (r.alpha || 0) * toRad,
-            y: (r.beta || 0) * toRad,
-            z: (r.gamma || 0) * toRad
-        };
-    }
-
-    function linearAccelFromEvent(event) {
-        const accIg = event.accelerationIncludingGravity;
-        const accLin = event.acceleration;
-        const now = performance.now();
-
-        if (accIg && accIg.x != null) {
-            const dtSec = lastDevicemotionTs > 0 ? Math.min(0.12, Math.max(0.005, (now - lastDevicemotionTs) / 1000)) : 1 / 60;
-            lastDevicemotionTs = now;
-            const a = Math.min(0.22, Math.max(0.04, GRAVITY_ALPHA_PER_S * dtSec));
-            if (!gEst) {
-                gEst = { x: accIg.x, y: accIg.y, z: accIg.z };
-            } else {
-                gEst.x += a * (accIg.x - gEst.x);
-                gEst.y += a * (accIg.y - gEst.y);
-                gEst.z += a * (accIg.z - gEst.z);
-            }
-            return {
-                x: accIg.x - gEst.x,
-                y: accIg.y - gEst.y,
-                z: accIg.z - gEst.z
-            };
+        if (recentIntervals.length > 4) {
+            recentIntervals.shift();
         }
 
-        if (accLin && accLin.x != null) {
-            lastDevicemotionTs = performance.now();
-            return { x: accLin.x, y: accLin.y, z: accLin.z };
+        if (recentIntervals.length < 2) {
+            return true;
         }
 
-        return null;
-    }
-
-    function bandPassMag(mag) {
-        if (!emaHasInit) {
-            emaFast = mag;
-            emaSlow = mag;
-            emaHasInit = true;
-        } else {
-            emaFast += EMA_FAST_BETA * (mag - emaFast);
-            emaSlow += EMA_SLOW_BETA * (mag - emaSlow);
-        }
-        return Math.abs(emaFast - emaSlow);
-    }
-
-    function finishCalibration() {
-        calibrationActive = false;
-        calibrationPendingUi = false;
-        calibHint.classList.add("hidden");
-        if (calibrationIntervals.length < 5) {
-            sensorInfo.textContent = "Калибровка: мало данных, повторите";
-            return;
-        }
-        const sum = calibrationIntervals.reduce((s, v) => s + v, 0);
-        const avgMs = Math.round(sum / calibrationIntervals.length);
-        const sorted = [...calibrationIntervals].sort((a, b) => a - b);
-        const med = sorted[Math.floor(sorted.length / 2)];
-        const { std } = noiseStats();
-        saveStepProfile({
-            avgStepIntervalMs: avgMs,
-            noiseBand: Math.max(0.06, std || 0.08),
-            calibratedAt: new Date().toISOString(),
-            lastMedianIntervalMs: med
-        });
-        sensorInfo.textContent = `Калибровка OK: ~${avgMs} мс/шаг`;
-    }
-
-    function registerCalibrationPeak(now) {
-        if (calibrationLastPeakTs) {
-            const gap = now - calibrationLastPeakTs;
-            if (gap >= 270 && gap <= 1750) calibrationIntervals.push(gap);
-        }
-        calibrationLastPeakTs = now;
-        calibrationPeakCount += 1;
-        if (calibrationPeakCount >= 10) finishCalibration();
-    }
-
-    function handleCalibrationFrame(sig, now) {
-        const thr = adaptivePeakThreshold();
-        const t = Math.max(0.12, thr * 0.88);
-        if (sig > t) wasAbovePeak = true;
-        if (wasAbovePeak && sig < t * 0.62) {
-            registerCalibrationPeak(now);
-            wasAbovePeak = false;
-        }
+        const average = recentIntervals.reduce((sum, value) => sum + value, 0) / recentIntervals.length;
+        const maxDiff = Math.max(...recentIntervals.map(value => Math.abs(value - average)));
+        return maxDiff < 360;
     }
 
     function acceptStep() {
-        const requiredSteps = strictReconfirmMode ? STRICT_RECONFIRM_STEPS : WALKING_CONFIRM_STEPS;
+        pendingSteps += 1;
 
-        if (!isWalkingConfirmed) {
-            pendingSteps += 1;
-            if (pendingSteps >= requiredSteps) {
-                isWalkingConfirmed = true;
-                steps += requiredSteps;
-                strictReconfirmMode = false;
-                pendingSteps = 0;
-                updateUI();
-            }
+        // 3 ритмді импульс жиналмайынша қадам қоспаймыз.
+        // Бұл отырғанда, телефонды қолға алғанда, бір-екі рет сермегенде болатын false positive-ті азайтады.
+        if (!isWalkingConfirmed && pendingSteps >= WALKING_CONFIRM_STEPS) {
+            isWalkingConfirmed = true;
+            steps += WALKING_CONFIRM_STEPS;
+            updateUI();
             return;
         }
 
-        steps += 1;
-        updateUI();
+        if (isWalkingConfirmed) {
+            steps += 1;
+            updateUI();
+        }
     }
 
     function handleMotion(event) {
@@ -683,104 +396,80 @@
 
         motionEventsCount += 1;
 
-        const lin = linearAccelFromEvent(event);
-        if (!lin) {
-            sensorInfo.textContent = "Сенсор: нет данных";
+        const acc = event.accelerationIncludingGravity || event.acceleration;
+        if (!acc) {
+            sensorInfo.textContent = "Сенсор: мәлімет келмей тұр";
             return;
         }
 
-        const energyAxes = Math.max(Math.abs(lin.x), Math.abs(lin.y), Math.abs(lin.z));
-        const magVec = Math.sqrt(lin.x * lin.x + lin.y * lin.y + lin.z * lin.z);
-        const mag = 0.45 * magVec + 0.55 * energyAxes;
+        const x = acc.x || 0;
+        const y = acc.y || 0;
+        const z = acc.z || 0;
+        const totalMagnitude = Math.sqrt(x * x + y * y + z * z);
+        const movement = Math.abs(totalMagnitude - GRAVITY_BASELINE);
+        const magnitude = lastMagnitude * 0.55 + movement * 0.45;
 
-        const bandAbs = bandPassMag(mag);
-        if (!magSmoothInit) {
-            magSmooth = mag;
-            magSmoothInit = true;
-        } else {
-            magSmooth = magSmooth * 0.52 + mag * 0.48;
-        }
-        const stepSignal = Math.max(bandAbs * 1.15, magSmooth * 0.78, mag * 0.62);
-        pushNoiseSample(stepSignal);
-
-        const rot = event.rotationRate || { alpha: 0, beta: 0, gamma: 0 };
-        const rv = rotationVecRadPerSec(rot);
-        const rotationMagnitude = Math.sqrt(rv.x * rv.x + rv.y * rv.y + rv.z * rv.z);
-        const smoothRotation = lastRotationMagnitude * 0.62 + rotationMagnitude * 0.38;
+        const rotation = event.rotationRate || { alpha: 0, beta: 0, gamma: 0 };
+        const rotationMagnitude = Math.sqrt(
+            Math.pow(rotation.alpha || 0, 2) +
+            Math.pow(rotation.beta || 0, 2) +
+            Math.pow(rotation.gamma || 0, 2)
+        );
+        const smoothRotation = lastRotationMagnitude * 0.65 + rotationMagnitude * 0.35;
 
         const now = Date.now();
 
-        if (calibrationActive) {
-            if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
-                calibrationLastPeakTs = 0;
-                wasAbovePeak = false;
-            }
-            const { mean: nm } = noiseStats();
-            if (stepSignal > nm * MIN_ACTIVE_SIGNAL_MULT) lastMotionTime = now;
-            handleCalibrationFrame(stepSignal, now);
-            lastBandAbs = stepSignal;
+        if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
+            resetRhythmOnly();
+        }
+
+        if (magnitude > MIN_ACTIVE_MOTION) {
+            lastMotionTime = now;
+        }
+
+        const looksLikeHandSwing =
+            smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION ||
+            smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.15;
+
+        if (looksLikeHandSwing) {
+            rejectedHandSwings += 1;
+            wasAbovePeak = false;
+            lastMagnitude = magnitude;
             lastRotationMagnitude = smoothRotation;
-            if (motionEventsCount % 10 === 0) {
-                sensorInfo.textContent = `Калибр.: ${calibrationPeakCount}/10 сиг:${stepSignal.toFixed(2)} m:${mag.toFixed(2)}`;
+
+            if (motionEventsCount % 8 === 0) {
+                sensorInfo.textContent = `Қол қимылы reject: ${rejectedHandSwings} | rot: ${smoothRotation.toFixed(0)}`;
             }
             return;
         }
 
-        if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
-            resetRhythmOnly(true);
-        }
-
-        const { mean: noiseMean } = noiseStats();
-        if (stepSignal > noiseMean * MIN_ACTIVE_SIGNAL_MULT) {
-            lastMotionTime = now;
-        }
-
-        const thr = adaptivePeakThreshold();
-
         if (motionEventsCount % 8 === 0) {
-            sensorInfo.textContent =
-                `сиг:${stepSignal.toFixed(2)} пор:${thr.toFixed(2)} m:${mag.toFixed(2)} бп:${bandAbs.toFixed(2)} ω:${smoothRotation.toFixed(1)} бф:${pendingSteps}${strictReconfirmMode ? "стр" : ""}`;
+            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | rot: ${smoothRotation.toFixed(0)} | events: ${motionEventsCount}`;
         }
 
-        const isPeak = stepSignal > thr;
-        const hasFallen = wasAbovePeak && stepSignal < thr * 0.7;
+        const isPeak = magnitude > STEP_PEAK_THRESHOLD;
+        const hasFallen = wasAbovePeak && magnitude < STEP_PEAK_THRESHOLD * 0.72;
 
-        if (isPeak) wasAbovePeak = true;
+        if (isPeak) {
+            wasAbovePeak = true;
+        }
 
         if (hasFallen) {
-            if (!lastStepTime) {
-                lastStepTime = now;
-                wasAbovePeak = false;
-                lastBandAbs = stepSignal;
-                lastRotationMagnitude = smoothRotation;
-                return;
-            }
-
-            let interval = now - lastStepTime;
-            if (interval < REFRACTORY_MS) {
-                wasAbovePeak = false;
-                lastBandAbs = stepSignal;
-                lastRotationMagnitude = smoothRotation;
-                return;
-            }
-
-            if (lastIntervalMs > 0 && interval < lastIntervalMs / CADENCE_JUMP_RESET_RATIO && interval >= 200) {
-                softResyncCadence();
-            }
+            const interval = lastStepTime ? now - lastStepTime : 600;
 
             if (isWalkingRhythm(interval)) {
                 acceptStep();
-                lastIntervalMs = interval;
                 lastStepTime = now;
             } else {
-                resetRhythmOnly(true);
+                resetRhythmOnly();
                 lastStepTime = now;
+                pendingSteps = 1;
             }
 
             wasAbovePeak = false;
         }
 
-        lastBandAbs = stepSignal;
+        lastMagnitude = magnitude;
         lastRotationMagnitude = smoothRotation;
     }
 
@@ -788,26 +477,17 @@
         const allowed = await requestMotionPermission();
 
         if (!allowed) {
-            setStatus("Доступ к датчику не предоставлён", "error");
+            setStatus("Датчикке рұқсат берілмеді", "error");
             return;
         }
 
         isRunning = true;
         resetStepAlgorithm();
-        if (calibrationPendingUi) {
-            calibrationActive = true;
-            calibrationIntervals.length = 0;
-            calibrationPeakCount = 0;
-            calibrationLastPeakTs = 0;
-            wasAbovePeak = false;
-            calibHint.classList.remove("hidden");
-            sensorInfo.textContent = "Калибровка: идите ровно 10 шагов";
-        }
         window.addEventListener("devicemotion", handleMotion);
 
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        setStatus("Идёт подсчёт шагов", "running");
+        setStatus("Жүріп жатыр", "running");
     }
 
     function stopTracking() {
@@ -816,15 +496,9 @@
         isRunning = false;
         window.removeEventListener("devicemotion", handleMotion);
 
-        if (calibrationActive) {
-            calibrationActive = false;
-            calibrationPendingUi = false;
-            calibHint.classList.add("hidden");
-            sensorInfo.textContent = "Калибровка отменена (СТОП)";
-        }
         startBtn.disabled = false;
         stopBtn.disabled = true;
-        setStatus("Остановлено");
+        setStatus("Тоқтады");
 
         sendToGoogleSheetsIfEnabled();
     }
@@ -834,7 +508,7 @@
         steps = 0;
         resetStepAlgorithm();
         updateUI();
-        setStatus("Готово к новому запуску");
+        setStatus("Қайта бастауға дайын");
     }
 
     function buildResultPayload() {
@@ -852,7 +526,7 @@
         if (!GOOGLE_SHEETS_ENABLED) return;
 
         if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) {
-            console.warn("URL Google Script не задан");
+            console.warn("Google Script URL қойылмаған");
             return;
         }
 
@@ -868,54 +542,23 @@
                 body: JSON.stringify(payload)
             });
         } catch (error) {
-            console.warn("Ошибка отправки в Google Sheets:", error);
+            console.warn("Google Sheets жіберу қатесі:", error);
         }
     }
 
     registerForm.addEventListener("submit", (event) => {
         event.preventDefault();
 
-        const phoneDigits = normalizeBelarusPhoneDigits(phoneInput.value);
-        if (!isCompleteBelarusPhone(phoneDigits)) {
-            phoneInput.setCustomValidity(
-                "Только номер РБ: +375(XX)XXX-XX-XX, код 15–17, 21–25, 29, 33, 44, 54"
-            );
-            phoneInput.reportValidity();
-            return;
-        }
-        phoneInput.setCustomValidity("");
-
         const user = {
             fullName: registerForm.fullName.value.trim(),
             year: registerForm.year.value.trim(),
             city: registerForm.city.value.trim(),
-            phone: formatBelarusPhoneDisplay(phoneDigits),
+            phone: registerForm.phone.value.trim(),
             savedAt: new Date().toISOString()
         };
 
         saveUser(user);
         showTracker();
-    });
-
-    attachBelarusPhoneField(phoneInput);
-
-    document.addEventListener("visibilitychange", () => {
-        if (document.hidden) {
-            hiddenAtMs = Date.now();
-            return;
-        }
-        if (hiddenAtMs && Date.now() - hiddenAtMs > 450 && isRunning) {
-            resetRhythmOnly(true);
-            calibrationLastPeakTs = 0;
-            wasAbovePeak = false;
-        }
-        hiddenAtMs = 0;
-    });
-
-    calibBtn.addEventListener("click", () => {
-        calibrationPendingUi = true;
-        calibHint.classList.remove("hidden");
-        sensorInfo.textContent = "Нажмите СТАРТ, затем ровно 10 шагов";
     });
 
     startBtn.addEventListener("click", startTracking);
