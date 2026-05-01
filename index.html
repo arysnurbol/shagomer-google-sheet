@@ -230,26 +230,26 @@
 
     const STEP_LENGTH_METERS = 0.75;
 
-    // Консервативная настройка под реальную ходьбу в кармане.
-    // В старой версии порог был слишком низкий, поэтому один шаг часто
-    // считался как 1–2 пика. На вашем тесте приложение дало 40 вместо 23.
-    const STEP_PEAK_THRESHOLD = 1.85;
-    const STEP_FALL_RATIO = 0.58;
-    const STEP_MIN_INTERVAL_MS = 390;
-    const STEP_MAX_INTERVAL_MS = 1300;
-    const WALKING_CONFIRM_STEPS = 4;
-    const INACTIVITY_RESET_MS = 2200;
+    // Балансталған настройка: алдыңғы fixed нұсқа тым қатты фильтрлеп,
+    // 31 нақты қадамның тек 12-сін санады. Сондықтан сезімталдықты көтердік,
+    // бірақ бір қадамды екі рет санамау үшін peak/fall және rhythm фильтрі қалды.
+    const STEP_PEAK_THRESHOLD = 1.15;
+    const STEP_FALL_RATIO = 0.70;
+    const STEP_MIN_INTERVAL_MS = 300;
+    const STEP_MAX_INTERVAL_MS = 1550;
+    const WALKING_CONFIRM_STEPS = 2;
+    const INACTIVITY_RESET_MS = 3000;
 
     // Динамическая гравитация: телефон может быть наклонён, поэтому
     // нельзя постоянно вычитать ровно 9.81.
-    const GRAVITY_ALPHA = 0.985;
-    const MOTION_SMOOTH_ALPHA = 0.62;
+    const GRAVITY_ALPHA = 0.98;
+    const MOTION_SMOOTH_ALPHA = 0.45;
 
     // Фильтр взмахов рукой: отсекаем сильное вращение телефона,
     // но не душим нормальную ходьбу.
-    const ROTATION_REJECT_THRESHOLD = 115;
-    const ROTATION_SOFT_REJECT_THRESHOLD = 75;
-    const STRONG_STEP_MOTION = 3.0;
+    const ROTATION_REJECT_THRESHOLD = 165;
+    const ROTATION_SOFT_REJECT_THRESHOLD = 120;
+    const STRONG_STEP_MOTION = 2.25;
 
 
     let steps = 0;
@@ -389,7 +389,7 @@
     function acceptStep() {
         pendingSteps += 1;
 
-        // Пока не накопилось 3 ритмичных импульса, к шагам ничего не добавляем.
+        // Пока не накопилось 2 ритмичных импульса, к шагам ничего не добавляем.
         // Это снижает ложные срабатывания при сидении, взятии телефона в руку и одиночных взмахах.
         if (!isWalkingConfirmed && pendingSteps >= WALKING_CONFIRM_STEPS) {
             isWalkingConfirmed = true;
