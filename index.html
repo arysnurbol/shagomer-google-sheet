@@ -172,6 +172,35 @@
             text-align: center;
             margin-top: 14px;
         }
+
+        .sync-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .sync-status {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            text-align: center;
+            color: var(--muted);
+            background: #f9fafb;
+            border: 1px solid var(--border);
+            word-break: break-word;
+        }
+
+        .sync-status.ok {
+            background: #dcfce7;
+            color: var(--success);
+        }
+
+        .sync-status.error {
+            background: #fee2e2;
+            color: var(--danger);
+        }
     </style>
 </head>
 <body>
@@ -191,7 +220,7 @@
 
         <label for="phone">Телефон (Беларусь)</label>
         <input id="phone" name="phone" type="tel" required inputmode="numeric" autocomplete="tel"
-            placeholder="+375(29)123-45-67" maxlength="18" title="Формат: +375(XX)XXX-XX-XX" />
+               placeholder="+375(29)123-45-67" maxlength="18" title="Формат: +375(XX)XXX-XX-XX" />
 
         <button class="btn-primary" type="submit">Сохранить</button>
     </form>
@@ -215,6 +244,16 @@
         <button id="resetBtn" class="btn-secondary" type="button">Сбросить</button>
         <button id="resetUserBtn" class="btn-secondary" type="button">Изменить профиль</button>
 
+        <div class="section">
+            <label for="googleScriptUrl">Google Apps Script Web App URL</label>
+            <input id="googleScriptUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec" />
+            <div class="sync-row">
+                <button id="saveGoogleUrlBtn" class="btn-secondary" type="button">Сақтау URL</button>
+                <button id="syncBtn" class="btn-primary" type="button">Google Sheets-ке жіберу</button>
+            </div>
+            <div id="syncStatus" class="sync-status">Синхронизация: URL енгізілмеген</div>
+        </div>
+
         <p class="small" id="sensorInfo">Сенсор: ожидание</p>
         <p class="small">Для более точного подсчёта держите телефон в кармане или близко к телу. Сильные взмахи рукой отбрасываются фильтром гироскопа (hand-swing filter).</p>
         <p class="small">На iOS после нажатия СТАРТ будет запрошен доступ к датчику движения. Тестируйте на телефоне и по HTTPS.</p>
@@ -223,11 +262,8 @@
 
 <script>
     const STORAGE_KEY_USER = "shagomer_user";
-
-    // Google Sheets будет подключён на следующем этапе.
-    // Сейчас false — никуда не отправляет.
-    const GOOGLE_SHEETS_ENABLED = false;
-    const GOOGLE_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+    const STORAGE_KEY_GOOGLE_SCRIPT_URL = "shagomer_google_script_url";
+    const STORAGE_KEY_PENDING_RESULTS = "shagomer_pending_results";
 
     const STEP_LENGTH_METERS = 0.75;
 
@@ -278,6 +314,10 @@
     const stopBtn = document.getElementById("stopBtn");
     const resetBtn = document.getElementById("resetBtn");
     const resetUserBtn = document.getElementById("resetUserBtn");
+    const googleScriptUrlInput = document.getElementById("googleScriptUrl");
+    const saveGoogleUrlBtn = document.getElementById("saveGoogleUrlBtn");
+    const syncBtn = document.getElementById("syncBtn");
+    const syncStatus = document.getElementById("syncStatus");
     const sensorInfo = document.getElementById("sensorInfo");
 
     function getUser() {
@@ -632,7 +672,7 @@
         stopBtn.disabled = true;
         setStatus("Остановлено");
 
-        sendToGoogleSheetsIfEnabled();
+        sendToGoogleSheets();
     }
 
     function resetCounter() {
@@ -643,39 +683,159 @@
         setStatus("Готово к новому запуску");
     }
 
-    function buildResultPayload() {
-        return {
-            createdAt: new Date().toISOString(),
-            user: getUser(),
-            steps,
-            meters: getMeters(),
-            source: "browser-devicemotion-mvp",
-            userAgent: navigator.userAgent
-        };
+    function getGoogleScriptUrl() {
+        return localStorage.getItem(STORAGE_KEY_GOOGLE_SCRIPT_URL) || "";
     }
 
-    async function sendToGoogleSheetsIfEnabled() {
-        if (!GOOGLE_SHEETS_ENABLED) return;
+    function setGoogleScriptUrl(url) {
+        localStorage.setItem(STORAGE_KEY_GOOGLE_SCRIPT_URL, url.trim());
+        googleScriptUrlInput.value = url.trim();
+        updateSyncStatus();
+    }
 
-        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) {
-            console.warn("URL Google Script не задан");
+    function isValidGoogleScriptUrl(url) {
+        return new RegExp("^https:\\/\\/script\\.google\\.com\\/macros\\/s\\/[A-Za-z0-9_-]+\\/exec(\\?.*)?$").test(String(url || "").trim());
+    }
+
+    function getPendingResults() {
+        try {
+            const items = JSON.parse(localStorage.getItem(STORAGE_KEY_PENDING_RESULTS) || "[]");
+            return Array.isArray(items) ? items : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function savePendingResults(items) {
+        localStorage.setItem(STORAGE_KEY_PENDING_RESULTS, JSON.stringify(items));
+        updateSyncStatus();
+    }
+
+    function addPendingResult(payload) {
+        const items = getPendingResults();
+        items.push(payload);
+        savePendingResults(items.slice(-50));
+    }
+
+    function setSyncStatus(message, type = "") {
+        syncStatus.className = `sync-status ${type}`.trim();
+        syncStatus.textContent = message;
+    }
+
+    function updateSyncStatus() {
+        const url = getGoogleScriptUrl();
+        const pendingCount = getPendingResults().length;
+
+        if (!url) {
+            setSyncStatus(`Синхронизация: URL енгізілмеген${pendingCount ? ` | кезекте: ${pendingCount}` : ""}`);
             return;
         }
 
-        const payload = buildResultPayload();
-
-        try {
-            await fetch(GOOGLE_SCRIPT_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
-            });
-        } catch (error) {
-            console.warn("Ошибка отправки в Google Sheets:", error);
+        if (!isValidGoogleScriptUrl(url)) {
+            setSyncStatus("Синхронизация: URL форматы дұрыс емес", "error");
+            return;
         }
+
+        setSyncStatus(`Синхронизация дайын${pendingCount ? ` | кезекте: ${pendingCount}` : ""}`, "ok");
+    }
+
+    function createResultId() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function buildResultPayload() {
+        const user = getUser() || {};
+        return {
+            id: createResultId(),
+            createdAt: new Date().toISOString(),
+            syncedAt: "",
+            fullName: user.fullName || "",
+            year: user.year || "",
+            city: user.city || "",
+            phone: user.phone || "",
+            steps,
+            meters: getMeters(),
+            source: "browser-devicemotion-mvp",
+            userAgent: navigator.userAgent,
+            motionEventsCount,
+            rejectedHandSwings
+        };
+    }
+
+    async function postToGoogleSheets(payload) {
+        const url = getGoogleScriptUrl();
+        if (!isValidGoogleScriptUrl(url)) {
+            throw new Error("Google Apps Script URL енгізіңіз");
+        }
+
+        // text/plain + no-cors avoids browser CORS preflight issues with Apps Script.
+        await fetch(url, {
+            method: "POST",
+            mode: "no-cors",
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify({ ...payload, syncedAt: new Date().toISOString() })
+        });
+    }
+
+    async function syncPayload(payload) {
+        try {
+            syncBtn.disabled = true;
+            setSyncStatus("Google Sheets-ке жіберілуде...");
+            await postToGoogleSheets(payload);
+            setSyncStatus("Google Sheets-ке жіберілді", "ok");
+            return true;
+        } catch (error) {
+            console.warn("Google Sheets sync error:", error);
+            addPendingResult(payload);
+            setSyncStatus(`Жіберілмеді. Кезекке сақталды: ${error.message}`, "error");
+            return false;
+        } finally {
+            syncBtn.disabled = false;
+        }
+    }
+
+    async function flushPendingResults() {
+        const items = getPendingResults();
+        if (!items.length) {
+            updateSyncStatus();
+            return;
+        }
+
+        const failed = [];
+        syncBtn.disabled = true;
+        setSyncStatus(`Кезектегі ${items.length} жазба жіберілуде...`);
+
+        for (const item of items) {
+            try {
+                await postToGoogleSheets(item);
+            } catch (error) {
+                failed.push(item);
+                console.warn("Pending sync error:", error);
+            }
+        }
+
+        savePendingResults(failed);
+        syncBtn.disabled = false;
+
+        if (failed.length) {
+            setSyncStatus(`Кейбір жазбалар жіберілмеді. Кезекте қалды: ${failed.length}`, "error");
+        } else {
+            setSyncStatus("Барлық жазба Google Sheets-ке жіберілді", "ok");
+        }
+    }
+
+    async function sendToGoogleSheets() {
+        const payload = buildResultPayload();
+        if (payload.steps <= 0) {
+            setSyncStatus("0 қадам жазылмайды", "error");
+            return;
+        }
+
+        await flushPendingResults();
+        await syncPayload(payload);
     }
 
     registerForm.addEventListener("submit", (event) => {
@@ -709,6 +869,22 @@
     stopBtn.addEventListener("click", stopTracking);
     resetBtn.addEventListener("click", resetCounter);
     resetUserBtn.addEventListener("click", () => showRegister(getUser()));
+    saveGoogleUrlBtn.addEventListener("click", () => {
+        const url = googleScriptUrlInput.value.trim();
+        if (!isValidGoogleScriptUrl(url)) {
+            setSyncStatus("Дұрыс Apps Script Web App URL енгізіңіз: https://script.google.com/macros/s/.../exec", "error");
+            return;
+        }
+        setGoogleScriptUrl(url);
+        setSyncStatus("URL сақталды", "ok");
+    });
+    syncBtn.addEventListener("click", sendToGoogleSheets);
+
+    googleScriptUrlInput.value = getGoogleScriptUrl();
+    updateSyncStatus();
+    if (getGoogleScriptUrl()) {
+        flushPendingResults();
+    }
 
     const savedUser = getUser();
     if (savedUser) {
