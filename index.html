@@ -248,10 +248,10 @@
             <label for="googleScriptUrl">Google Apps Script Web App URL</label>
             <input id="googleScriptUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec" />
             <div class="sync-row">
-                <button id="saveGoogleUrlBtn" class="btn-secondary" type="button">Сақтау URL</button>
-                <button id="syncBtn" class="btn-primary" type="button">Google Sheets-ке жіберу</button>
+                <button id="saveGoogleUrlBtn" class="btn-secondary" type="button">Сохранить URL</button>
+                <button id="syncBtn" class="btn-primary" type="button">Отправить в Google Sheets</button>
             </div>
-            <div id="syncStatus" class="sync-status">Синхронизация: URL енгізілмеген</div>
+            <div id="syncStatus" class="sync-status">Синхронизация: URL не введён</div>
         </div>
 
         <p class="small" id="sensorInfo">Сенсор: ожидание</p>
@@ -267,9 +267,9 @@
 
     const STEP_LENGTH_METERS = 0.75;
 
-    // Балансталған настройка: алдыңғы fixed нұсқа тым қатты фильтрлеп,
-    // 31 нақты қадамның тек 12-сін санады. Сондықтан сезімталдықты көтердік,
-    // бірақ бір қадамды екі рет санамау үшін peak/fall және rhythm фильтрі қалды.
+    // Сбалансированная настройка: предыдущая фиксированная версия слишком сильно фильтровала
+    // и из 31 реального шага считала только 12. Поэтому повысили чувствительность,
+    // но оставили фильтры пика/спада и ритма, чтобы не считать один шаг дважды.
     const STEP_PEAK_THRESHOLD = 1.15;
     const STEP_FALL_RATIO = 0.70;
     const STEP_MIN_INTERVAL_MS = 300;
@@ -630,8 +630,7 @@
                 acceptStep();
                 lastStepTime = now;
             } else {
-                // Бұл жерде қадамды бірден қоспаймыз. Тек жаңа ырғақтың
-                // басталуы болуы мүмкін деп белгілейміз.
+                // Здесь не добавляем шаг сразу: возможно, это только начало нового ритма.
                 resetRhythmOnly();
                 lastStepTime = now;
                 pendingSteps = 1;
@@ -727,16 +726,16 @@
         const pendingCount = getPendingResults().length;
 
         if (!url) {
-            setSyncStatus(`Синхронизация: URL енгізілмеген${pendingCount ? ` | кезекте: ${pendingCount}` : ""}`);
+            setSyncStatus(`Синхронизация: URL не введён${pendingCount ? ` | в очереди: ${pendingCount}` : ""}`);
             return;
         }
 
         if (!isValidGoogleScriptUrl(url)) {
-            setSyncStatus("Синхронизация: URL форматы дұрыс емес", "error");
+            setSyncStatus("Синхронизация: неверный формат URL", "error");
             return;
         }
 
-        setSyncStatus(`Синхронизация дайын${pendingCount ? ` | кезекте: ${pendingCount}` : ""}`, "ok");
+        setSyncStatus(`Синхронизация готова${pendingCount ? ` | в очереди: ${pendingCount}` : ""}`, "ok");
     }
 
     function createResultId() {
@@ -766,7 +765,7 @@
     async function postToGoogleSheets(payload) {
         const url = getGoogleScriptUrl();
         if (!isValidGoogleScriptUrl(url)) {
-            throw new Error("Google Apps Script URL енгізіңіз");
+            throw new Error("Укажите URL Google Apps Script");
         }
 
         // text/plain + no-cors avoids browser CORS preflight issues with Apps Script.
@@ -783,14 +782,14 @@
     async function syncPayload(payload) {
         try {
             syncBtn.disabled = true;
-            setSyncStatus("Google Sheets-ке жіберілуде...");
+            setSyncStatus("Отправка в Google Sheets…");
             await postToGoogleSheets(payload);
-            setSyncStatus("Google Sheets-ке жіберілді", "ok");
+            setSyncStatus("Отправлено в Google Sheets", "ok");
             return true;
         } catch (error) {
             console.warn("Google Sheets sync error:", error);
             addPendingResult(payload);
-            setSyncStatus(`Жіберілмеді. Кезекке сақталды: ${error.message}`, "error");
+            setSyncStatus(`Не отправлено. Сохранено в очереди: ${error.message}`, "error");
             return false;
         } finally {
             syncBtn.disabled = false;
@@ -806,7 +805,7 @@
 
         const failed = [];
         syncBtn.disabled = true;
-        setSyncStatus(`Кезектегі ${items.length} жазба жіберілуде...`);
+        setSyncStatus(`Отправка записей из очереди (${items.length})…`);
 
         for (const item of items) {
             try {
@@ -821,16 +820,16 @@
         syncBtn.disabled = false;
 
         if (failed.length) {
-            setSyncStatus(`Кейбір жазбалар жіберілмеді. Кезекте қалды: ${failed.length}`, "error");
+            setSyncStatus(`Часть записей не отправлена. В очереди осталось: ${failed.length}`, "error");
         } else {
-            setSyncStatus("Барлық жазба Google Sheets-ке жіберілді", "ok");
+            setSyncStatus("Все записи отправлены в Google Sheets", "ok");
         }
     }
 
     async function sendToGoogleSheets() {
         const payload = buildResultPayload();
         if (payload.steps <= 0) {
-            setSyncStatus("0 қадам жазылмайды", "error");
+            setSyncStatus("Нет шагов — нечего отправлять", "error");
             return;
         }
 
@@ -872,11 +871,11 @@
     saveGoogleUrlBtn.addEventListener("click", () => {
         const url = googleScriptUrlInput.value.trim();
         if (!isValidGoogleScriptUrl(url)) {
-            setSyncStatus("Дұрыс Apps Script Web App URL енгізіңіз: https://script.google.com/macros/s/.../exec", "error");
+            setSyncStatus("Введите корректный URL веб-приложения Apps Script: https://script.google.com/macros/s/.../exec", "error");
             return;
         }
         setGoogleScriptUrl(url);
-        setSyncStatus("URL сақталды", "ok");
+        setSyncStatus("URL сохранён", "ok");
     });
     syncBtn.addEventListener("click", sendToGoogleSheets);
 
