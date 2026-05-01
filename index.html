@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="kk">
+<html lang="ru">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -177,46 +177,46 @@
 <body>
 <main class="app">
     <h1>ШАГОМЕР</h1>
-    <p class="subtitle">MVP: браузердегі қадам санағыш</p>
+    <p class="subtitle">MVP: счётчик шагов в браузере</p>
 
     <form id="registerForm">
         <label for="fullName">ФИО</label>
-        <input id="fullName" name="fullName" required autocomplete="name" placeholder="Аты-жөніңіз" />
+        <input id="fullName" name="fullName" required autocomplete="name" placeholder="Фамилия Имя Отчество" />
 
-        <label for="year">Жыл / туған жыл</label>
-        <input id="year" name="year" required inputmode="numeric" placeholder="Мысалы: 2001" />
+        <label for="year">Год / год рождения</label>
+        <input id="year" name="year" required inputmode="numeric" placeholder="Например: 2001" />
 
-        <label for="city">Қала</label>
-        <input id="city" name="city" required placeholder="Мысалы: Алматы" />
+        <label for="city">Город</label>
+        <input id="city" name="city" required placeholder="Например: Москва" />
 
         <label for="phone">Телефон</label>
         <input id="phone" name="phone" required inputmode="tel" autocomplete="tel" placeholder="+7..." />
 
-        <button class="btn-primary" type="submit">Сақтау</button>
+        <button class="btn-primary" type="submit">Сохранить</button>
     </form>
 
     <section id="tracker" class="section hidden">
-        <div class="status" id="statusBox">Дайын</div>
+        <div class="status" id="statusBox">Готово</div>
 
         <div class="stats">
             <div class="stat">
                 <strong id="stepsValue">0</strong>
-                <span>қадам</span>
+                <span>шагов</span>
             </div>
             <div class="stat">
                 <strong id="metersValue">0</strong>
-                <span>метр</span>
+                <span>метров</span>
             </div>
         </div>
 
         <button id="startBtn" class="btn-success" type="button">СТАРТ</button>
         <button id="stopBtn" class="btn-danger" type="button" disabled>СТОП</button>
-        <button id="resetBtn" class="btn-secondary" type="button">Қайта бастау</button>
-        <button id="resetUserBtn" class="btn-secondary" type="button">Профильді өзгерту</button>
+        <button id="resetBtn" class="btn-secondary" type="button">Сбросить</button>
+        <button id="resetUserBtn" class="btn-secondary" type="button">Изменить профиль</button>
 
-        <p class="small" id="sensorInfo">Сенсор: күтіп тұр</p>
-        <p class="small">Дәлірек санау үшін телефонды қалтаға немесе денеге жақын ұстаңыз. Қатты қол сермеу gyroscope filter арқылы reject болады.</p>
-        <p class="small">iOS-та СТАРТ басқаннан кейін қозғалыс датчигіне рұқсат сұралады. Телефонда және HTTPS-та тестілеңіз.</p>
+        <p class="small" id="sensorInfo">Сенсор: ожидание</p>
+        <p class="small">Для более точного подсчёта держите телефон в кармане или близко к телу. Сильные взмахи рукой отсекаются фильтром гироскопа.</p>
+        <p class="small">На iOS после нажатия СТАРТ будет запрошен доступ к датчику движения. Тестируйте на телефоне и по HTTPS.</p>
     </section>
 </main>
 
@@ -301,7 +301,7 @@
     function showTracker() {
         registerForm.classList.add("hidden");
         tracker.classList.remove("hidden");
-        setStatus("Дайын");
+        setStatus("Готово");
         updateUI();
     }
 
@@ -319,7 +319,7 @@
 
     async function requestMotionPermission() {
         if (typeof DeviceMotionEvent === "undefined") {
-            setStatus("Бұл браузер қозғалыс датчигін қолдамайды", "error");
+            setStatus("Этот браузер не поддерживает датчик движения", "error");
             return false;
         }
 
@@ -349,7 +349,7 @@
         rejectedBursts = 0;
         isWalkingConfirmed = false;
         strictReconfirmMode = false;
-        sensorInfo.textContent = "Сенсор: күтіп тұр";
+        sensorInfo.textContent = "Сенсор: ожидание";
     }
 
     function resetRhythmOnly(strict = false) {
@@ -412,7 +412,7 @@
 
         const acc = event.accelerationIncludingGravity || event.acceleration;
         if (!acc) {
-            sensorInfo.textContent = "Сенсор: мәлімет келмей тұр";
+            sensorInfo.textContent = "Сенсор: нет данных";
             return;
         }
 
@@ -460,13 +460,13 @@
             lastRotationMagnitude = smoothRotation;
 
             if (motionEventsCount % 8 === 0) {
-                sensorInfo.textContent = `Reject: hand ${rejectedHandSwings}, burst ${rejectedBursts} | rot: ${smoothRotation.toFixed(0)}`;
+                sensorInfo.textContent = `Отклонено: взмах ${rejectedHandSwings}, рывок ${rejectedBursts} | вращ.: ${smoothRotation.toFixed(0)}`;
             }
             return;
         }
 
         if (motionEventsCount % 8 === 0) {
-            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | rot: ${smoothRotation.toFixed(0)} | pending: ${pendingSteps}${strictReconfirmMode ? " strict" : ""}`;
+            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | вращ.: ${smoothRotation.toFixed(0)} | буфер: ${pendingSteps}${strictReconfirmMode ? " строго" : ""}`;
         }
 
         const isPeak = magnitude > STEP_PEAK_THRESHOLD;
@@ -499,7 +499,7 @@
         const allowed = await requestMotionPermission();
 
         if (!allowed) {
-            setStatus("Датчикке рұқсат берілмеді", "error");
+            setStatus("Доступ к датчику не предоставлён", "error");
             return;
         }
 
@@ -509,7 +509,7 @@
 
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        setStatus("Жүріп жатыр", "running");
+        setStatus("Идёт подсчёт шагов", "running");
     }
 
     function stopTracking() {
@@ -520,7 +520,7 @@
 
         startBtn.disabled = false;
         stopBtn.disabled = true;
-        setStatus("Тоқтады");
+        setStatus("Остановлено");
 
         sendToGoogleSheetsIfEnabled();
     }
@@ -530,7 +530,7 @@
         steps = 0;
         resetStepAlgorithm();
         updateUI();
-        setStatus("Қайта бастауға дайын");
+        setStatus("Готово к новому запуску");
     }
 
     function buildResultPayload() {
@@ -548,7 +548,7 @@
         if (!GOOGLE_SHEETS_ENABLED) return;
 
         if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) {
-            console.warn("Google Script URL қойылмаған");
+            console.warn("URL Google Script не задан");
             return;
         }
 
@@ -564,7 +564,7 @@
                 body: JSON.stringify(payload)
             });
         } catch (error) {
-            console.warn("Google Sheets жіберу қатесі:", error);
+            console.warn("Ошибка отправки в Google Sheets:", error);
         }
     }
 
