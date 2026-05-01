@@ -233,9 +233,9 @@
     // Балансталған настройка: алдыңғы fixed нұсқа тым қатты фильтрлеп,
     // 31 нақты қадамның тек 12-сін санады. Сондықтан сезімталдықты көтердік,
     // бірақ бір қадамды екі рет санамау үшін peak/fall және rhythm фильтрі қалды.
-    const STEP_PEAK_THRESHOLD = 1.15;
-    const STEP_FALL_RATIO = 0.70;
-    const STEP_MIN_INTERVAL_MS = 300;
+    const STEP_PEAK_THRESHOLD = 1.38;
+    const STEP_FALL_RATIO = 0.58;
+    const STEP_MIN_INTERVAL_MS = 340;
     const STEP_MAX_INTERVAL_MS = 1550;
     const WALKING_CONFIRM_STEPS = 2;
     const INACTIVITY_RESET_MS = 3000;
@@ -466,7 +466,7 @@
 
         const looksLikeHandSwing =
             (smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION) ||
-            (smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.05);
+            (smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.15);
 
         if (looksLikeHandSwing) {
             rejectedHandSwings += 1;
