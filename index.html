@@ -232,17 +232,19 @@
     const STEP_PEAK_THRESHOLD = 1.45;
     const STEP_MIN_INTERVAL_MS = 280;
     const STEP_MAX_INTERVAL_MS = 1250;
-    const WALKING_CONFIRM_STEPS = 3;
+    const WALKING_CONFIRM_STEPS = 5;
+    const STRICT_RECONFIRM_STEPS = 8;
     const GRAVITY_BASELINE = 9.81;
-    const INACTIVITY_RESET_MS = 1600;
+    const INACTIVITY_RESET_MS = 1300;
 
     // Anti-hand-swing filter v2:
     // Бұрын rotation filter тым қатты болды, сондықтан real step-тер көп жоғалды.
     // Енді rotation тек қозғалыс әлсіз болғанда ғана reject жасайды.
-    const ROTATION_REJECT_THRESHOLD = 130;
-    const ROTATION_SOFT_REJECT_THRESHOLD = 85;
+    const ROTATION_REJECT_THRESHOLD = 120;
+    const ROTATION_SOFT_REJECT_THRESHOLD = 78;
     const MIN_ACTIVE_MOTION = 0.45;
     const STRONG_STEP_MOTION = 2.6;
+    const NON_WALKING_BURST_MOTION = 4.8;
 
     let steps = 0;
     let pendingSteps = 0;
@@ -255,7 +257,9 @@
     let motionEventsCount = 0;
     let lastMotionTime = 0;
     let rejectedHandSwings = 0;
+    let rejectedBursts = 0;
     let isWalkingConfirmed = false;
+    let strictReconfirmMode = false;
 
     const registerForm = document.getElementById("registerForm");
     const tracker = document.getElementById("tracker");
@@ -342,16 +346,19 @@
         motionEventsCount = 0;
         lastMotionTime = 0;
         rejectedHandSwings = 0;
+        rejectedBursts = 0;
         isWalkingConfirmed = false;
+        strictReconfirmMode = false;
         sensorInfo.textContent = "Сенсор: күтіп тұр";
     }
 
-    function resetRhythmOnly() {
+    function resetRhythmOnly(strict = false) {
         pendingSteps = 0;
         lastStepTime = 0;
         wasAbovePeak = false;
         recentIntervals = [];
         isWalkingConfirmed = false;
+        strictReconfirmMode = strict;
     }
 
     function isWalkingRhythm(interval) {
@@ -376,11 +383,18 @@
     function acceptStep() {
         pendingSteps += 1;
 
-        // 3 ритмді импульс жиналмайынша қадам қоспаймыз.
-        // Бұл отырғанда, телефонды қолға алғанда, бір-екі рет сермегенде болатын false positive-ті азайтады.
-        if (!isWalkingConfirmed && pendingSteps >= WALKING_CONFIRM_STEPS) {
+        const requiredSteps = strictReconfirmMode ? STRICT_RECONFIRM_STEPS : WALKING_CONFIRM_STEPS;
+
+        // Normal start: 5 ритмді импульс керек.
+        // Тоқтағаннан кейін: 8 ритмді импульс керек.
+        // Осылайша отырып телефонды қолға қозғау, столға қою сияқты қысқа қозғалыстар қадамға айналмайды.
+        if (!isWalkingConfirmed && pendingSteps >= requiredSteps) {
             isWalkingConfirmed = true;
-            steps += WALKING_CONFIRM_STEPS;
+
+            // Strict mode-та buffered қадамдарды толық қоспаймыз.
+            // Себебі inactivity-тен кейінгі алғашқы импульстердің бір бөлігі қол қозғалысы болуы мүмкін.
+            steps += strictReconfirmMode ? Math.max(1, Math.round(requiredSteps * 0.45)) : requiredSteps;
+            strictReconfirmMode = false;
             updateUI();
             return;
         }
@@ -420,7 +434,9 @@
         const now = Date.now();
 
         if (lastMotionTime && now - lastMotionTime > INACTIVITY_RESET_MS) {
-            resetRhythmOnly();
+            // Адам тоқтағаннан кейін телефонды қолға алып қозғау жиі false step береді.
+            // Сондықтан inactivity-тен кейін жаңа жүрісті strict mode арқылы ғана растаймыз.
+            resetRhythmOnly(true);
         }
 
         if (magnitude > MIN_ACTIVE_MOTION) {
@@ -431,20 +447,26 @@
             smoothRotation > ROTATION_REJECT_THRESHOLD && magnitude < STRONG_STEP_MOTION ||
             smoothRotation > ROTATION_SOFT_REJECT_THRESHOLD && magnitude < STEP_PEAK_THRESHOLD * 1.15;
 
-        if (looksLikeHandSwing) {
-            rejectedHandSwings += 1;
-            wasAbovePeak = false;
+        // Отыру, телефонды столға қою, қолға алып жан-жаққа созу сияқты әрекеттерде
+        // қысқа, қатты burst болады. Жүріс әлі confirmed болмаса, мұндай burst-ті қадамға айналдырмаймыз.
+        const looksLikeNonWalkingBurst = !isWalkingConfirmed && magnitude > NON_WALKING_BURST_MOTION;
+
+        if (looksLikeHandSwing || looksLikeNonWalkingBurst) {
+            if (looksLikeHandSwing) rejectedHandSwings += 1;
+            if (looksLikeNonWalkingBurst) rejectedBursts += 1;
+
+            resetRhythmOnly(true);
             lastMagnitude = magnitude;
             lastRotationMagnitude = smoothRotation;
 
             if (motionEventsCount % 8 === 0) {
-                sensorInfo.textContent = `Қол қимылы reject: ${rejectedHandSwings} | rot: ${smoothRotation.toFixed(0)}`;
+                sensorInfo.textContent = `Reject: hand ${rejectedHandSwings}, burst ${rejectedBursts} | rot: ${smoothRotation.toFixed(0)}`;
             }
             return;
         }
 
         if (motionEventsCount % 8 === 0) {
-            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | rot: ${smoothRotation.toFixed(0)} | events: ${motionEventsCount}`;
+            sensorInfo.textContent = `Сенсор: ${magnitude.toFixed(2)} | rot: ${smoothRotation.toFixed(0)} | pending: ${pendingSteps}${strictReconfirmMode ? " strict" : ""}`;
         }
 
         const isPeak = magnitude > STEP_PEAK_THRESHOLD;
@@ -461,7 +483,7 @@
                 acceptStep();
                 lastStepTime = now;
             } else {
-                resetRhythmOnly();
+                resetRhythmOnly(true);
                 lastStepTime = now;
                 pendingSteps = 1;
             }
